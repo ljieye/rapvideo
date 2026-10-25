@@ -388,6 +388,18 @@ async function handleRequest(req, res) {
   const p = u.pathname;
   try {
     // API
+    if (req.method === 'GET' && p === '/api/health') {
+      return json(res, 200, {
+        ok: true,
+        serverless: IS_SERVERLESS,
+        model: VIDEO_MODEL,
+        seeapiKey: !!SEEAPI_KEY,
+        deepseekKey: !!DEEPSEEK_KEY,
+        pancakeConfigured: !!(process.env.WAFFO_MERCHANT_ID && process.env.WAFFO_PRIVATE_KEY),
+        dataDir: DATA_DIR,
+        time: new Date().toISOString()
+      });
+    }
     if (req.method === 'GET' && p === '/api/config') {
       return json(res, 200, {
         stages: Object.fromEntries(Object.entries(STAGES).map(([k, v]) => [k, { zh: v.zh, en: v.en }])),

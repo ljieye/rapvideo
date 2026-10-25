@@ -33,12 +33,22 @@ const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
 const FREE_ALLOWANCE = parseInt(process.env.FREE_VIDEO_ALLOWANCE || '5', 10);
 
 if (!SEEAPI_KEY || !DEEPSEEK_KEY) {
-  console.error('缺少 SEEAPI_API_KEY 或 DEEPSEEK_API_KEY，请检查 .env');
-  process.exit(1);
+  const msg = '缺少 SEEAPI_API_KEY 或 DEEPSEEK_API_KEY，请在环境变量/Vercel Dashboard 中配置';
+  if (require.main === module) { console.error(msg); process.exit(1); }
+  else console.error('[config]', msg);
 }
 
-// ---------- 数据目录 ----------
-const DATA_DIR = path.join(__dirname, 'data');
+const IS_SERVERLESS = !!(process.env.VERCEL);
+
+// ---------- 数据目录（Serverless 环境下项目目录只读，回退到 /tmp） ----------
+function resolveDataDir() {
+  const prefer = process.env.DATA_DIR;
+  if (prefer) { fs.mkdirSync(prefer, { recursive: true }); return prefer; }
+  const local = path.join(__dirname, 'data');
+  try { fs.mkdirSync(local, { recursive: true }); fs.accessSync(local, fs.constants.W_OK); return local; }
+  catch { const tmp = path.join('/tmp', 'rapvideo-data'); fs.mkdirSync(tmp, { recursive: true }); return tmp; }
+}
+const DATA_DIR = resolveDataDir();
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -55,7 +65,13 @@ const tasks = loadJSON(TASKS_FILE, {});
 const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const BALANCE_FILE = path.join(DATA_DIR, 'balance.json');
-const products = loadJSON(PRODUCTS_FILE, {});   // { lite: "PROD_xxx", ... }
+// 商品 ID 默认值：已在 Pancake 后台创建完成，可用环境变量覆盖（避免 Serverless 冷启动重复建品）
+const DEFAULT_PRODUCTS = {
+  lite:  process.env.WAFFO_PRODUCT_LITE  || 'PROD_0pjgtokQhivBFvgnvpfCWq',
+  pro:   process.env.WAFFO_PRODUCT_PRO   || 'PROD_4pQWuE2N0o5ryYoVrplEn7',
+  ultra: process.env.WAFFO_PRODUCT_ULTRA || 'PROD_5SNXCTda0ZzIaQzZpahS1x'
+};
+const products = Object.assign({}, DEFAULT_PRODUCTS, loadJSON(PRODUCTS_FILE, {}));
 const orders = loadJSON(ORDERS_FILE, {});       // orderId -> {...}
 const balance = loadJSON(BALANCE_FILE, { trialRemaining: FREE_ALLOWANCE, purchased: 0 });
 function saveProducts() { fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2)); }
@@ -63,8 +79,9 @@ function saveOrders() { fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, nul
 function saveBalance() { fs.writeFileSync(BALANCE_FILE, JSON.stringify(balance, null, 2)); }
 function remainingVideos() { return Math.max(0, balance.trialRemaining + balance.purchased); }
 
-// 启动时确保 Pancake 商品存在（幂等）
+// 启动时确保 Pancake 商品存在（幂等；Serverless 下使用内置默认 ID，跳过创建）
 (async () => {
+  if (IS_SERVERLESS) return;
   if (!process.env.WAFFO_MERCHANT_ID || !process.env.WAFFO_PRIVATE_KEY) return;
   for (const [packKey, pack] of Object.entries(waffo.PACKS)) {
     if (products[packKey]) continue;
@@ -77,7 +94,6 @@ function remainingVideos() { return Math.max(0, balance.trialRemaining + balance
       console.error(`[pancake] 创建商品失败(${packKey}):`, e.message);
     }
   }
-  console.log('[pancake] products:', JSON.stringify(products));
 })();
 
 // ---------- 选项 ----------
@@ -367,7 +383,7 @@ function serveStatic(req, res, urlPath) {
 }
 
 // ---------- 路由 ----------
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
   const u = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const p = u.pathname;
   try {
@@ -448,9 +464,13 @@ const server = http.createServer(async (req, res) => {
     console.error('[error]', req.method, p, e.message);
     if (!res.headersSent) json(res, e.status || 500, { error: e.message || '服务器内部错误' });
   }
-});
+}
 
-server.listen(PORT, () => {
-  console.log(`AI Rap Video server → http://localhost:${PORT}`);
-  console.log(`Model: ${VIDEO_MODEL} / ${VIDEO_ENDPOINT} (768P, 12s) · Free allowance: ${FREE_ALLOWANCE}`);
-});
+// 本地运行：node server.js；Serverless（Vercel）：只导出 handler
+if (require.main === module) {
+  http.createServer(handleRequest).listen(PORT, () => {
+    console.log(`AI Rap Video server → http://localhost:${PORT}`);
+    console.log(`Model: ${VIDEO_MODEL} / ${VIDEO_ENDPOINT} (768P, 12s) · Trial allowance: ${FREE_ALLOWANCE}`);
+  });
+}
+module.exports = { handleRequest };

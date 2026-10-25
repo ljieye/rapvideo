@@ -5,11 +5,35 @@
 
 ## 运行
 
+本地：
+
 ```bash
-NODE_PATH=/Users/dandan/.workbuddy/binaries/node/workspace/node_modules \
-  /Users/dandan/.workbuddy/binaries/node/versions/22.22.2-6/bin/node server.js
-# 打开 http://localhost:3000
+node server.js
+# 打开 http://localhost:3100
 ```
+
+## 部署到 Vercel
+
+代码已按 Serverless 改造：`api/index.js` 导出函数处理器，`vercel.json` 把所有非静态请求重写到该函数，`public/` 静态文件由 Vercel 直接托管。
+
+1. 推送仓库到 GitHub，Vercel → Import Project（或 `vercel --prod`）。
+2. **必须**在 Vercel Dashboard → Settings → Environment Variables 配置（缺一个 API 路由就会 500）：
+   - `SEEAPI_API_KEY`、`DEEPSEEK_API_KEY`
+   - `WAFFO_MERCHANT_ID`、`WAFFO_STORE_ID`、`WAFFO_PRIVATE_KEY`（单行 Base64）
+   - `PUBLIC_BASE_URL=https://rapvideo.vercel.app`
+   - `WAFFO_DEV_SIMULATE=0`（生产环境务必为 0）
+   - 可选：`WAFFO_PRODUCT_LITE/PRO/ULTRA`（默认已内置当前店铺商品 ID）
+3. 重新部署后，在 Pancake Dashboard 把 Webhook URL 设为 `https://rapvideo.vercel.app/api/webhooks/waffo`。
+4. 注意：Vercel 函数的文件系统是临时的（数据写入 `/tmp/rapvideo-data`），**额度、订单、任务记录在实例重启/冷启动后会重置**。要持久化请接 Vercel KV/Blob 或数据库（当前版本未接）。
+
+### 本地 / 线上行为差异
+
+| 事项 | 本地 `node server.js` | Vercel |
+|---|---|---|
+| 数据存储 | 项目 `data/`（持久） | `/tmp`（临时，会丢失） |
+| 商品自动创建 | 缺失时自动创建 | 跳过（使用内置 ID） |
+| 模拟支付接口 | 由 `WAFFO_DEV_SIMULATE` 控制 | 同左，生产必须 0 |
+
 
 ## 配置（.env）
 

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Rap 二重唱视频生成 | 双人照片，原创说唱</title>
+<meta name="description" content="上传两张人像或一张合影，选择舞台与场景，生成 12 秒 768P 带 AI 原创人声和伴奏的说唱二重唱视频。">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>">
+</head>
+<body>
+
+<header class="nav">
+  <div class="container nav-inner">
+    <a class="logo" href="#top">🎤 <span>RapDuet<span class="accent">.AI</span></span></a>
+    <nav class="nav-links">
+      <a href="#generator" data-i18n="nav_create">开始创作</a>
+      <a href="#styles" data-i18n="nav_styles">风格示例</a>
+      <a href="#how" data-i18n="nav_how">使用流程</a>
+      <a href="#pricing" data-i18n="nav_pricing">视频包</a>
+      <a href="#faq" data-i18n="nav_faq">常见问题</a>
+    </nav>
+    <div class="nav-actions">
+      <span class="allowance-chip" id="allowanceChip" title="剩余可用视频数">🎟 <span id="allowanceNum">–</span></span>
+      <button class="btn-ghost" id="langToggle">EN</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container hero-inner">
+      <p class="eyebrow">MINIMAX H3 · 768P · AI 原创人声与伴奏 · 一次性视频包，无订阅</p>
+      <h1 data-i18n="hero_title">你的照片，<br>一首原创说唱二重唱</h1>
+      <p class="hero-sub" data-i18n="hero_sub">上传两张人像或一张合影，选一个舞台、一种场合，AI 为你们写出专属歌词、唱出原创 Beat，生成 12 秒可分享的说唱视频。分享前请确认肖像、歌词与口型效果。</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#generator" data-i18n="hero_cta">立即生成说唱视频</a>
+        <a class="btn btn-ghost" href="#styles" data-i18n="hero_cta2">先看风格示例</a>
+      </div>
+      <div class="hero-grid">
+        <div class="hero-card hc1"><div class="hero-card-label">录音棚 · Studio</div></div>
+        <div class="hero-card hc2"><div class="hero-card-label">橙色录音棚 · Booth</div></div>
+        <div class="hero-card hc3"><div class="hero-card-label">街头 Cypher</div></div>
+        <div class="hero-card hc4"><div class="hero-card-label">生日同台 · Birthday</div></div>
+      </div>
+      <p class="hero-note" data-i18n="hero_note">↑ 四个独立制作的示例场景 · 点击任一卡片可带入创作面板</p>
+    </div>
+  </section>
+
+  <!-- GENERATOR -->
+  <section class="section" id="generator">
+    <div class="container">
+      <p class="kicker">PHOTO TO VIDEO</p>
+      <h2 data-i18n="gen_title">创作你的 AI 说唱二重唱</h2>
+      <p class="section-sub" data-i18n="gen_sub">把两个人带进一首原创说唱。选择照片、舞台与场合，剩下的交给 AI。</p>
+
+      <div class="generator card">
+        <!-- 照片 -->
+        <div class="gen-block">
+          <div class="gen-head">
+            <h3 data-i18n="gen_photos">你的照片</h3>
+            <div class="seg" id="photoMode">
+              <button class="seg-btn active" data-mode="two" data-i18n="seg_two">两张人像</button>
+              <button class="seg-btn" data-mode="one" data-i18n="seg_one">一张合影</button>
+            </div>
+          </div>
+          <div class="photo-row">
+            <label class="photo-slot" id="slot1">
+              <input type="file" accept="image/jpeg,image/png,image/webp" hidden>
+              <div class="photo-empty"><span class="plus">＋</span><span data-i18n="add_photo">添加照片</span></div>
+              <span class="photo-tag" data-i18n="person1">人物 1</span>
+            </label>
+            <label class="photo-slot one-only hidden" id="slot2">
+              <input type="file" accept="image/jpeg,image/png,image/webp" hidden>
+              <div class="photo-empty"><span class="plus">＋</span><span data-i18n="add_photo">添加照片</span></div>
+              <span class="photo-tag" data-i18n="person2">人物 2</span>
+            </label>
+            <label class="photo-slot one-only hidden" id="slotBoth">
+              <input type="file" accept="image/jpeg,image/png,image/webp" hidden>
+              <div class="photo-empty"><span class="plus">＋</span><span data-i18n="add_together">添加合影</span></div>
+              <span class="photo-tag" data-i18n="both">双人合影</span>
+            </label>
+          </div>
+          <p class="hint" data-i18n="photo_hint">JPG / PNG / WebP · 每张不超过 2 MB · 两名成年人、面部清晰、光线均匀</p>
+        </div>
+
+        <!-- 舞台 & 场合 -->
+        <div class="gen-block two-col">
+          <div>
+            <h3 data-i18n="gen_stage">选择舞台</h3>
+            <div class="chip-group" id="stageGroup"></div>
+          </div>
+          <div>
+            <h3 data-i18n="gen_occasion">选择场合</h3>
+            <div class="chip-group" id="occasionGroup"></div>
+          </div>
+        </div>
+        <div class="gen-block">
+          <h3 data-i18n="gen_lang">说唱语言</h3>
+          <div class="chip-group" id="langGroup"></div>
+        </div>
+
+        <!-- 画幅 -->
+        <div class="gen-block">
+          <h3 data-i18n="gen_format">画幅与细节</h3>
+          <div class="format-row">
+            <div class="seg" id="formatSeg">
+              <button class="seg-btn active" data-format="9:16"><b>9:16</b> <span data-i18n="fmt_portrait">竖屏</span></button>
+              <button class="seg-btn" data-format="1:1"><b>1:1</b> <span data-i18n="fmt_square">方形</span></button>
+              <button class="seg-btn" data-format="16:9"><b>16:9</b> <span data-i18n="fmt_landscape">横屏</span></button>
+            </div>
+            <p class="hint" data-i18n="format_hint">12 秒 · 768P · AI 原创人声与伴奏</p>
+          </div>
+        </div>
+
+        <!-- 个人化 -->
+        <div class="gen-block">
+          <h3 data-i18n="gen_personal">让说唱更私人</h3>
+          <textarea id="personalDetail" maxlength="300" rows="3"
+            data-i18n-ph="personal_ph" placeholder="写一个名字、一段故事或一句想唱进去的话，例如：给阿琳的生日，我们在天台上唱过歌"></textarea>
+          <label class="consent">
+            <input type="checkbox" id="consentCheck">
+            <span data-i18n="consent">两位表演者均为成年人，且我已获得使用其照片制作本 AI 视频的许可。</span>
+          </label>
+        </div>
+
+        <div class="gen-actions">
+          <button class="btn btn-primary btn-lg" id="generateBtn" data-i18n="gen_btn">生成说唱视频</button>
+          <p class="hint" data-i18n="gen_privacy">照片仅在点击生成后上传，将与你的创作指令一起发送给 AI 服务商。生成结果请先审阅再分享。</p>
+        </div>
+
+        <!-- 任务进度 / 结果 -->
+        <div class="task-panel hidden" id="taskPanel">
+          <div class="task-status">
+            <span class="spinner"></span>
+            <span id="taskStatusText">准备中…</span>
+          </div>
+          <div class="task-error hidden" id="taskError"></div>
+          <div class="task-result hidden" id="taskResult">
+            <video id="resultVideo" controls playsinline></video>
+            <a class="btn btn-primary" id="downloadBtn" download data-i18n="download">下载视频</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STYLES -->
+  <section class="section alt" id="styles">
+    <div class="container">
+      <p class="kicker">STUDIO PREVIEW</p>
+      <h2 data-i18n="styles_title">为两个人打造的录音棚</h2>
+      <p class="section-sub" data-i18n="styles_sub">四个原创方向示例。点击任意风格，把这条导演思路带入创作面板。</p>
+      <div class="style-grid">
+        <button class="style-card sc1" data-preset="studio,duet"><h3 data-i18n="style1">聚光灯二重唱</h3><p data-i18n="style1_d">近景机位、专注的录音棚光线，放松的肩部与细腻手势。</p><span class="use-dir" data-i18n="use_dir">用这条方向 →</span></button>
+        <button class="style-card sc2" data-preset="booth,duet"><h3 data-i18n="style2">全景录音棚</h3><p data-i18n="style2_d">广角展现整个录音棚，两人分立麦克风两侧呼应。</p><span class="use-dir" data-i18n="use_dir">用这条方向 →</span></button>
+        <button class="style-card sc3" data-preset="street,battle"><h3 data-i18n="style3">前排能量</h3><p data-i18n="style3_d">街头 cypher 氛围，环绕机位，最具感染力的现场感。</p><span class="use-dir" data-i18n="use_dir">用这条方向 →</span></button>
+        <button class="style-card sc4" data-preset="studio,birthday"><h3 data-i18n="style4">生日双人组</h3><p data-i18n="style4_d">为生日定制的高能量说唱祝福，庆祝气氛拉满。</p><span class="use_dir use-dir" data-i18n="use_dir">用这条方向 →</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODELS -->
+  <section class="section">
+    <div class="container">
+      <p class="kicker">TRANSPARENCY</p>
+      <h2 data-i18n="models_title">视频背后的 AI 模型</h2>
+      <div class="model-cards">
+        <div class="card model-card"><b>Minimax H3</b><span data-i18n="m1">你的视频 · 12 秒 · 768P · 原生 AI 音频</span></div>
+        <div class="card model-card"><b>DeepSeek</b><span data-i18n="m2">创作指令生成与内容预审（歌词方向）</span></div>
+        <div class="card model-card"><b>SeeAPI</b><span data-i18n="m3">统一 API 网关 · 模型接入来源</span></div>
+      </div>
+      <p class="hint" data-i18n="models_note">提交前，文字指令会先经 DeepSeek 预审；未通过审查的内容不会开始生成、不消耗额度。模型版本：minimax-h3 / text-to-video · SeeAPI。</p>
+    </div>
+  </section>
+
+  <!-- HOW -->
+  <section class="section alt" id="how">
+    <div class="container">
+      <p class="kicker">HOW IT WORKS</p>
+      <h2 data-i18n="how_title">从照片到专属二重唱</h2>
+      <div class="steps">
+        <div class="step"><span class="step-num">1</span><h3 data-i18n="how1_t">添加照片</h3><p data-i18n="how1_d">两张清晰的人像，或一张双人合影。光线均匀、双眼可见、面部清晰，效果最佳。</p></div>
+        <div class="step"><span class="step-num">2</span><h3 data-i18n="how2_t">选舞台，写细节</h3><p data-i18n="how2_d">四个舞台 × 四种场合，中英文说唱任选。加一个名字或共同回忆，让歌词只属于你们。</p></div>
+        <div class="step"><span class="step-num">3</span><h3 data-i18n="how3_t">生成、试听、下载</h3><p data-i18n="how3_d">AI 生成 12 秒 768P 二重唱视频，完成后在"我的作品"中试听与下载。分享前请完整审阅。</p></div>
+      </div>
+
+      <!-- 我的作品 -->
+      <div class="my-works">
+        <h3 data-i18n="works_title">🎞 我的作品</h3>
+        <div id="worksList" class="works-list"><p class="hint" data-i18n="works_empty">还没有作品，去生成第一条说唱视频吧。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="section" id="pricing">
+    <div class="container">
+      <p class="kicker">PRICING</p>
+      <h2 data-i18n="pricing_title">选择你的视频包</h2>
+      <p class="section-sub" data-i18n="pricing_sub">一次性付费，无订阅、无自动续费，额度 365 天有效。</p>
+      <div class="pricing-grid">
+        <div class="card price-card">
+          <h3 data-i18n="pack_lite">体验版</h3>
+          <p class="price"><b>$4.90</b><span data-i18n="onetime">/ 一次性</span></p>
+          <p class="pack-videos" data-i18n="lite_v">1 个视频 · 365 天有效</p>
+          <button class="btn btn-ghost pack-btn" data-pack="lite" data-i18n="choose">选择视频包</button>
+        </div>
+        <div class="card price-card featured">
+          <span class="badge" data-i18n="popular">最受欢迎</span>
+          <h3 data-i18n="pack_pro">进阶版</h3>
+          <p class="price"><b>$8.90</b><span data-i18n="onetime">/ 一次性</span></p>
+          <p class="pack-videos" data-i18n="pro_v">2 个视频 · 365 天有效</p>
+          <button class="btn btn-primary pack-btn" data-pack="pro" data-i18n="choose">选择视频包</button>
+        </div>
+        <div class="card price-card">
+          <h3 data-i18n="pack_ultra">畅享版</h3>
+          <p class="price"><b>$19.90</b><span data-i18n="onetime">/ 一次性</span></p>
+          <p class="pack-videos" data-i18n="ultra_v">5 个视频 · 365 天有效</p>
+          <button class="btn btn-ghost pack-btn" data-pack="ultra" data-i18n="choose">选择视频包</button>
+        </div>
+      </div>
+      <p class="hint" data-i18n="pricing_note">每个视频均为 12 秒、768P、带 AI 人声与伴奏的说唱二重唱，由 Minimax H3 生成。生成失败的任务将自动返还额度。支付由 Pancake（Waffo）安全处理，支持全球主流支付方式，一次性买断、无订阅。</p>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="section alt" id="faq">
+    <div class="container narrow">
+      <p class="kicker">FAQ</p>
+      <h2 data-i18n="faq_title">AI 说唱视频常见问题</h2>
+      <div class="faq-list">
+        <details><summary data-i18n="q1">在这里生成 AI 说唱视频最简单的方式是什么？</summary><p data-i18n="a1">选择视频包，上传两张人像或一张合影，选好舞台、场合与语言，写一句个人细节，即可生成 12 秒 768P 二重唱视频，并在"我的作品"中查看。</p></details>
+        <details><summary data-i18n="q2">可以上传我自己的歌吗？</summary><p data-i18n="a2">本流程不接受音频文件。AI 会围绕你选择的主题创作全新的歌词、人声与伴奏，你可以在下载后用自行持有版权的音频再剪辑。</p></details>
+        <details><summary data-i18n="q3">能使用精确歌词或还原某位歌手的声音吗？</summary><p data-i18n="a3">不能。你可以提供名字、故事或短语作为主题，但精确歌词与口型对齐不保证，也不支持录音上传或单独的音频驱动口型控制。</p></details>
+        <details><summary data-i18n="q4">这是免费的 AI 说唱视频生成器吗？</summary><p data-i18n="a4">正式版为一次性付费视频包，不订阅、不自动续费。当前演示环境提供少量体验额度，可直接试用。</p></details>
+        <details><summary data-i18n="q5">可以发布到 TikTok 或 YouTube Shorts 吗？</summary><p data-i18n="a5">可以。选择 9:16 竖屏画幅，完整审阅视频与音频后下载即可。发布文案与平台规则请在发布平台内自行处理，并按需标注 AI 生成。</p></details>
+        <details><summary data-i18n="q6">生成失败怎么办？</summary><p data-i18n="a6">确认失败的任务会自动返还视频额度，可重新调整照片或指令后再次生成。</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-band">
+    <div class="container">
+      <h2 data-i18n="cta_title">用你自己的方向，创作 AI 说唱二重唱</h2>
+      <a class="btn btn-primary btn-lg" href="#generator" data-i18n="cta_btn">开始创作</a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container footer-inner">
+    <span>🎤 RapDuet.AI — <span data-i18n="footer_tag">双人说唱，一键成片</span></span>
+    <span class="hint" data-i18n="footer_note">生成内容由 AI 制作 · 请在分享前确认肖像授权并遵守平台规则</span>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "builds": [
+    { "src": "api/lyrics.js", "use": "@vercel/node", "config": { "maxDuration": 30 } },
+    { "src": "public/**", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/lyrics", "dest": "/api/lyrics.js" },
+    { "src": "/(.*)", "dest": "/public/$1" }
+  ]
+}

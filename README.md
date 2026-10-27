@@ -1,5 +1,15 @@
 # RapVideo 网站（已端到端跑通，带账号系统）
 
+## 部署状态：Vercel = 静态展示 + 歌词预览；完整功能需常驻平台
+Vercel 是 Serverless（单次执行有时长上限、无持久磁盘），而完整流水线要
+4–5 分钟渲染 + 队列 + 本地文件存储，两者不兼容。因此当前 Vercel 部署：
+
+- ✅ 正常工作：首页/案例/价格/FAQ/法律页（静态），`POST /api/lyrics`（写词预览，Serverless 函数）
+- ❌ 不可用：注册登录、下单支付、视频生成（需要常驻进程，迁 Railway/Render/VPS 后恢复）
+
+Vercel 环境变量：`OPENAI_API_KEY`（DeepSeek key，歌词用）。可选
+`OPENAI_BASE_URL` / `OPENAI_MODEL`。改动经 GitHub push 后自动重新部署。
+
 ## 架构
 单进程 Node.js（express），无数据库依赖（JSON 文件存储），可部署到任何
 能跑 Node 18+ 的平台（Railway / Render / Fly.io / VPS）。

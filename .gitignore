@@ -1,3 +1,14 @@
-node_modules/
-data/
+# secrets — never commit
 .env
+
+# runtime data (user photos, orders, videos, admin token)
+data/
+
+# dependencies
+node_modules/
+
+# OS noise
+.DS_Store
+
+# logs
+*.log

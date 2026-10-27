@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in | RapVideo</title>
+<style>
+:root{
+  --ink:#111113; --ink2:#5a5a63; --ink3:#8b8b95;
+  --line:#e6e6ea; --line2:#d0d0d7;
+  --bg:#ffffff; --bg2:#f7f7f9;
+  --brand:#5b3df5; --brand-soft:#f0edff;
+  --ok:#0f6e56; --warn:#854f0b; --bad:#b42318;
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",system-ui,sans-serif;
+  background:var(--bg);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:960px;margin:0 auto;padding:0 24px}
+a{color:inherit;text-decoration:none}
+header{border-bottom:0.5px solid var(--line);position:sticky;top:0;
+  background:rgba(255,255,255,.92);backdrop-filter:blur(10px);z-index:50}
+.nav{display:flex;align-items:center;justify-content:space-between;height:62px}
+.logo{font-size:17px;font-weight:600;letter-spacing:-.3px}
+.logo span{color:var(--brand)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  border:0.5px solid var(--line2);background:transparent;color:var(--ink);
+  padding:9px 16px;border-radius:9px;font-size:14px;cursor:pointer;
+  font-family:inherit;transition:all .15s}
+.btn:hover{background:var(--bg2)}
+.btn-p{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn-p:hover{background:#4a2fe0}
+.btn-lg{padding:13px 20px;font-size:15px;border-radius:11px;width:100%}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+.auth{max-width:420px;margin:56px auto 80px}
+.auth h1{font-size:28px;letter-spacing:-.7px;font-weight:650;margin-bottom:6px}
+.auth .sub{color:var(--ink2);font-size:14.5px;margin-bottom:24px}
+.tabs{display:inline-flex;background:var(--bg2);border:0.5px solid var(--line);border-radius:10px;padding:3px;margin-bottom:22px}
+.tabs button{border:0;background:transparent;padding:8px 20px;border-radius:8px;font-size:14px;
+  cursor:pointer;font-family:inherit;color:var(--ink2)}
+.tabs button.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+
+.gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;
+  border:0.5px solid var(--line2);background:#fff;padding:11px 16px;border-radius:10px;
+  font-size:14.5px;font-family:inherit;cursor:pointer;transition:all .15s}
+.gbtn:hover{background:var(--bg2)}
+.or{display:flex;align-items:center;gap:12px;color:var(--ink3);font-size:12.5px;margin:20px 0}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+
+label{display:block;font-size:13px;color:var(--ink2);margin:14px 0 6px;font-weight:500}
+input{width:100%;border:0.5px solid var(--line2);border-radius:10px;padding:11px 13px;
+  font-size:14.5px;font-family:inherit;background:#fff;color:var(--ink)}
+input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+form .btn-lg{margin-top:20px}
+
+.msg{border-radius:10px;padding:11px 14px;font-size:13.5px;margin-bottom:18px;display:none}
+.msg.show{display:block}
+.msg.err{background:#fef3f2;border:0.5px solid #fecdc9;color:var(--bad)}
+.msg.ok{background:#ecfdf3;border:0.5px solid #bbf7d0;color:var(--ok)}
+.msg.info{background:#fffbeb;border:0.5px solid #f5d67c;color:var(--warn)}
+.msg code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:4px;font-size:12.5px}
+
+.fine{font-size:12px;color:var(--ink3);margin-top:18px;text-align:center;line-height:1.7}
+.fine a{color:var(--ink2);text-decoration:underline}
+</style>
+<link rel="stylesheet" href="/fonts.css">
+<link rel="stylesheet" href="/ui.css">
+
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="logo" href="/">Rap<span>Video</span></a>
+    <a class="btn" href="/">Back to site</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="auth">
+    <h1 id="title">Welcome back</h1>
+    <p class="sub" id="subtitle">Sign in to see your videos and make new ones.</p>
+
+    <div class="msg" id="msg"></div>
+
+    <div class="tabs">
+      <button id="tabIn" class="on" onclick="setTab('in')">Sign in</button>
+      <button id="tabUp" onclick="setTab('up')">Create account</button>
+    </div>
+
+    <button class="gbtn" id="googleBtn" onclick="google()">
+      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+        <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.2.5 24 .5 14.6.5 6.5 5.9 2.6 13.7l7.8 6c1.9-5.7 7.2-10.2 13.6-10.2z"/>
+        <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-2.8-.4-4.1H24v7.8h12.5c-.3 2.1-1.6 5.2-4.7 7.3l7.6 5.9c4.4-4.1 6.7-10.1 6.7-16.9z"/>
+        <path fill="#FBBC05" d="M10.4 28.3c-.5-1.4-.8-2.8-.8-4.3s.3-3 .8-4.3l-7.8-6C1 16.9 0 20.3 0 24s1 7.1 2.6 10.3l7.8-6z"/>
+        <path fill="#34A853" d="M24 47.5c6.2 0 11.4-2 15.4-5.6l-7.6-5.9c-2 1.4-4.7 2.4-7.8 2.4-6.4 0-11.7-4.4-13.6-10.2l-7.8 6C6.5 42.1 14.6 47.5 24 47.5z"/>
+      </svg>
+      Continue with Google
+    </button>
+
+    <div class="or">or use your email</div>
+
+    <form id="form" onsubmit="submitForm(event)">
+      <div id="nameRow" style="display:none">
+        <label for="name">Name</label>
+        <input id="name" type="text" autocomplete="name" placeholder="Alex">
+      </div>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="At least 8 characters" required minlength="8">
+      <button class="btn btn-p btn-lg" id="submitBtn" type="submit">Sign in</button>
+    </form>
+
+    <p class="fine">
+      By continuing you agree to our <a href="/legal/terms.html">Terms</a> and <a href="/legal/privacy.html">Privacy Policy</a>.
+      Photos are deleted after 7 days.
+    </p>
+  </div>
+</div>
+
+<script>
+var MODE = 'in';
+var NEXT = new URLSearchParams(location.search).get('next') || '/';
+var GOOGLE_ON = false;
+
+function setTab(m){
+  MODE = m;
+  document.getElementById('tabIn').classList.toggle('on', m === 'in');
+  document.getElementById('tabUp').classList.toggle('on', m === 'up');
+  document.getElementById('title').textContent = m === 'in' ? 'Welcome back' : 'Create your account';
+  document.getElementById('subtitle').textContent = m === 'in'
+    ? 'Sign in to see your videos and make new ones.'
+    : 'One account keeps every video you make in one place.';
+  document.getElementById('nameRow').style.display = m === 'up' ? 'block' : 'none';
+  document.getElementById('submitBtn').textContent = m === 'in' ? 'Sign in' : 'Create account';
+  document.getElementById('password').setAttribute('autocomplete', m === 'in' ? 'current-password' : 'new-password');
+  hide();
+}
+
+function msg(text, kind){
+  var el = document.getElementById('msg');
+  el.className = 'msg show ' + (kind || 'err');
+  el.innerHTML = text;
+}
+function hide(){ document.getElementById('msg').className = 'msg'; }
+
+function showGoogle(why){
+  msg('Google sign-in is not set up on this server yet. Add <code>GOOGLE_CLIENT_ID</code> and ' +
+      '<code>GOOGLE_CLIENT_SECRET</code> to <code>.env</code> (see README), then this button works. ' +
+      'Email and password sign-in works right now.', 'info');
+}
+
+function google(){
+  if (!GOOGLE_ON) return showGoogle();
+  location.href = '/auth/google?next=' + encodeURIComponent(NEXT);
+}
+
+function submitForm(e){
+  e.preventDefault();
+  var btn = document.getElementById('submitBtn');
+  var body = {
+    email: document.getElementById('email').value.trim(),
+    password: document.getElementById('password').value
+  };
+  if (MODE === 'up') body.name = document.getElementById('name').value.trim();
+
+  btn.disabled = true;
+  fetch('/api/auth/' + (MODE === 'up' ? 'register' : 'login'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(function(r){ return r.json(); }).then(function(r){
+    btn.disabled = false;
+    if (!r.ok) return msg(r.error || 'Something went wrong.');
+    location.href = NEXT;
+  }).catch(function(){
+    btn.disabled = false;
+    msg('Network error. Try again.');
+  });
+}
+
+/* page init */
+(function init(){
+  var err = new URLSearchParams(location.search).get('error');
+  if (err === 'google_not_configured') showGoogle();
+  else if (err === 'google_failed') msg('Google sign-in failed. Try again, or use email instead.');
+  else if (err === 'bad_state') msg('That sign-in link expired. Try again.');
+  else if (err === 'missing_code') msg('Google did not return a code. Try again.');
+  else if (err) msg('Sign-in failed (' + err + ').');
+
+  fetch('/api/auth/me').then(function(r){ return r.json(); }).then(function(r){
+    GOOGLE_ON = Boolean(r.googleEnabled);
+    if (r.user) location.href = NEXT;   // already signed in
+  }).catch(function(){});
+})();
+</script>
+</body>
+</html>

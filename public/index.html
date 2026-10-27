@@ -1,264 +1,955 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Rap 二重唱视频生成 | 双人照片，原创说唱</title>
-<meta name="description" content="上传两张人像或一张合影，选择舞台与场景，生成 12 秒 768P 带 AI 原创人声和伴奏的说唱二重唱视频。">
-<link rel="stylesheet" href="style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>">
+<title>AI Rap Video Generator | Rap Video</title>
+<meta name="description" content="Make an AI rap video from a topic and one or two photos. Six clean lines, an original beat, lip-sync, 15 seconds vertical HD.">
+<link rel="stylesheet" href="/fonts.css">
+<link rel="stylesheet" href="/ui.css">
+<style>
+/* ---------------- hero ---------------- */
+.hero{padding:76px 0 0}
+.hero-grid{max-width:880px}
+.hero h1{margin:22px 0 24px}
+.hero h1 .y{color:var(--brand)}
+.hero .lead{max-width:44ch}
+.hero-cta{display:flex;gap:12px;margin-top:30px;flex-wrap:wrap}
+.hero-meta{display:flex;gap:22px;margin-top:26px;flex-wrap:wrap}
+.hero-meta span{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink3);display:flex;align-items:center;gap:7px;
+}
+.hero-meta span::before{content:"";width:5px;height:5px;background:var(--brand);display:block}
+
+/* marquee */
+.marquee{
+  margin-top:56px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  overflow:hidden;position:relative;background:#0e0e14;
+}
+.marquee::before,.marquee::after{
+  content:"";position:absolute;top:0;bottom:0;width:90px;z-index:2;pointer-events:none;
+}
+.marquee::before{left:0;background:linear-gradient(90deg,#0e0e14,transparent)}
+.marquee::after{right:0;background:linear-gradient(270deg,#0e0e14,transparent)}
+.mtrack{display:flex;gap:0;width:max-content;animation:slide 46s linear infinite}
+.marquee:hover .mtrack{animation-play-state:paused}
+@keyframes slide{to{transform:translateX(-50%)}}
+.mtrack button{
+  background:none;border:0;color:var(--ink2);font-family:var(--mono);
+  font-size:12.5px;letter-spacing:.02em;padding:14px 0;cursor:pointer;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:14px;
+}
+.mtrack button:hover{color:var(--brand)}
+.mtrack button::after{content:"★";color:var(--brand);font-size:10px;margin:0 14px 0 0}
+
+/* ---------------- showcase ---------------- */
+.showcase{padding:64px 0 0}
+.show-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:20px}
+.chipbar{display:flex;gap:8px}
+.cbtn{
+  width:38px;height:38px;border:1px solid var(--line2);background:transparent;color:var(--ink);
+  border-radius:2px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;
+}
+.cbtn:hover{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
+.stage{display:grid;grid-template-columns:1fr 340px;gap:0;border:1px solid var(--line);background:var(--bg2)}
+.stage-video{position:relative;background:#000;min-height:420px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.stage-video video{width:100%;height:100%;max-height:560px;object-fit:contain;display:block}
+.badges{position:absolute;top:14px;left:14px;display:flex;gap:8px;z-index:3}
+.bdg{
+  font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  padding:4px 8px;background:rgba(11,11,16,.72);border:1px solid rgba(255,255,255,.22);
+  backdrop-filter:blur(6px);color:var(--ink);
+}
+.bdg.solid{background:var(--brand);color:var(--on-brand);border-color:var(--brand);font-weight:500}
+.snd-btn{
+  position:absolute;bottom:14px;left:14px;z-index:3;border:1px solid rgba(255,255,255,.28);
+  background:rgba(11,11,16,.7);color:var(--ink);font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.14em;text-transform:uppercase;padding:7px 12px;cursor:pointer;backdrop-filter:blur(6px);
+}
+.snd-btn:hover{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
+.stage-info{padding:26px;border-left:1px solid var(--line);display:flex;flex-direction:column}
+.stage-info .tn{font-family:var(--display);font-size:26px;text-transform:uppercase;line-height:1;margin:14px 0 10px}
+.stage-info p{color:var(--ink2);font-size:13.5px;line-height:1.6}
+.spec{margin-top:auto;padding-top:20px;border-top:1px solid var(--line)}
+.spec div{display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px;color:var(--ink2)}
+.spec div span:first-child{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.spec div span:last-child{color:var(--ink)}
+
+/* ---------------- make ---------------- */
+.make{padding:80px 0 0}
+.sec-head{margin-bottom:34px}
+.sec-head h2{margin:16px 0 12px}
+.block{padding:24px 0;border-top:1px solid var(--line)}
+.block:first-of-type{border-top:0;padding-top:0}
+.block-h{display:flex;align-items:baseline;gap:12px;margin-bottom:16px}
+.block-h .n{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--brand)}
+.block-h .t{font-family:var(--display);font-size:20px;text-transform:uppercase;letter-spacing:.01em}
+.block-h .s{color:var(--ink3);font-size:12.5px;margin-left:auto;font-family:var(--mono);letter-spacing:.06em}
+
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:2px;overflow:hidden}
+.seg button{
+  border:0;background:transparent;color:var(--ink2);padding:9px 22px;font-size:13.5px;
+  font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;
+}
+.seg button+button{border-left:1px solid var(--line2)}
+.seg button.on{background:var(--brand);color:var(--on-brand);font-weight:500}
+
+.slots{display:grid;grid-template-columns:repeat(2,minmax(0,190px));gap:14px;margin-top:16px}
+.slot{
+  aspect-ratio:3/4;border:1px dashed var(--line2);background:var(--bg3);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;overflow:hidden;position:relative;transition:border-color .15s,background .15s;
+}
+.slot:hover{border-color:var(--brand);background:#16161e}
+.slot img{width:100%;height:100%;object-fit:cover}
+.slot .ph{text-align:center;color:var(--ink3);font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.12em;text-transform:uppercase;padding:0 12px;line-height:1.8}
+.slot .ph svg{margin-bottom:8px;stroke:rgba(255,255,255,.45)}
+.slot .x{
+  position:absolute;top:8px;right:8px;width:24px;height:24px;border-radius:50%;
+  background:rgba(11,11,16,.8);color:#fff;border:1px solid rgba(255,255,255,.3);
+  cursor:pointer;font-size:15px;line-height:1;
+}
+.hint{font-size:12.5px;color:var(--ink3);margin-top:12px;line-height:1.6}
+
+textarea{min-height:96px}
+.cnt{text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:7px;letter-spacing:.1em}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{
+  border:1px solid var(--line2);background:transparent;color:var(--ink2);
+  padding:7px 13px;font-size:12.5px;cursor:pointer;font-family:var(--sans);
+  border-radius:2px;transition:all .15s;
+}
+.chip:hover{border-color:var(--brand);color:var(--brand);background:var(--brand-soft)}
+
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.pick{
+  border:1px solid var(--line2);background:var(--bg3);padding:14px;cursor:pointer;
+  border-radius:2px;transition:all .15s;position:relative;
+}
+.pick:hover{border-color:rgba(255,255,255,.4)}
+.pick.on{border-color:var(--brand);background:var(--brand-soft)}
+.pick .nm{font-size:13.5px;font-weight:500}
+.pick .ds{font-size:11.5px;color:var(--ink3);margin-top:3px}
+.pick .tk{position:absolute;top:10px;right:10px;color:var(--brand);font-size:11px}
+
+.submit-row{margin-top:32px;padding-top:26px;border-top:1px solid var(--line)}
+
+/* ---------------- lyrics ---------------- */
+.lyr{background:var(--bg3);border:1px solid var(--line);padding:20px 22px;margin-top:6px}
+.lyr ol{list-style:none;counter-reset:l}
+.lyr li{
+  counter-increment:l;padding:11px 0 11px 34px;border-bottom:1px solid var(--line);
+  position:relative;font-size:16px;cursor:text;
+}
+.lyr li:last-child{border-bottom:0}
+.lyr li::before{
+  content:counter(l);position:absolute;left:0;top:12px;font-family:var(--mono);
+  font-size:10.5px;color:var(--brand);letter-spacing:.1em;
+}
+.lyr li:focus{outline:none;background:var(--brand-soft);margin:0 -10px;padding-left:44px;padding-right:10px}
+.rowend{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+.fade{animation:fade .3s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ---------------- stepper ---------------- */
+.stepper{display:flex;gap:0;margin:0 0 34px;border-bottom:1px solid var(--line)}
+.st{
+  flex:1;padding:0 0 14px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink3);border-bottom:2px solid transparent;
+  margin-bottom:-1px;display:flex;align-items:center;gap:8px;
+}
+.st .stn{
+  width:20px;height:20px;border:1px solid var(--line2);display:flex;align-items:center;
+  justify-content:center;font-size:9.5px;flex:none;
+}
+.st.on{color:var(--ink);border-bottom-color:var(--brand)}
+.st.on .stn{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
+.st.done{color:var(--ok)}
+.st.done .stn{border-color:var(--ok);color:var(--ok)}
+
+/* ---------------- packs ---------------- */
+.packs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.pack{
+  border:1px solid var(--line2);background:var(--bg3);padding:20px;cursor:pointer;
+  border-radius:2px;transition:all .15s;position:relative;
+}
+.pack:hover{border-color:rgba(255,255,255,.4)}
+.pack.on{border-color:var(--brand);background:var(--brand-soft)}
+.pack .qty{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+.pack .prc{font-family:var(--display);font-size:38px;line-height:1;margin:12px 0 6px}
+.pack .per{font-size:12px;color:var(--ink3)}
+.pack .tag{
+  position:absolute;top:-1px;right:-1px;background:var(--brand);color:var(--on-brand);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  padding:4px 8px;font-weight:500;
+}
+.order{background:var(--bg3);border:1px solid var(--line);padding:18px;margin-top:18px;font-size:14px}
+.orow{display:flex;justify-content:space-between;padding:6px 0;color:var(--ink2)}
+.orow.tot{border-top:1px solid var(--line);margin-top:10px;padding-top:14px;color:var(--ink);
+  font-weight:600;font-size:16px}
+.secure{text-align:center;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  color:var(--ink3);margin-top:12px;text-transform:uppercase}
+
+/* ---------------- progress ---------------- */
+.plist{list-style:none;margin:6px 0 0}
+.plist li{display:flex;align-items:center;gap:14px;padding:14px 0;font-size:14.5px;
+  color:var(--ink3);border-bottom:1px solid var(--line)}
+.plist li:last-child{border-bottom:0}
+.plist li.on{color:var(--ink)}
+.plist li.ok{color:var(--ok)}
+.dot{width:22px;height:22px;border:1px solid var(--line2);border-radius:50%;flex:none;
+  display:flex;align-items:center;justify-content:center;font-size:10px}
+li.on .dot{border-color:var(--brand);color:var(--brand)}
+li.ok .dot{background:var(--ok);border-color:var(--ok);color:#06231f}
+.spin{width:10px;height:10px;border:2px solid rgba(245,197,66,.25);border-top-color:var(--brand);
+  border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.bar{height:3px;background:var(--bg3);overflow:hidden;margin-top:22px}
+.bar i{display:block;height:100%;background:var(--brand);width:0;transition:width .6s ease}
+
+/* ---------------- result ---------------- */
+.result{text-align:center;padding:20px 0 0}
+.vbox{
+  width:260px;aspect-ratio:9/16;background:#000;border:1px solid var(--line);
+  margin:28px auto 20px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;position:relative;overflow:hidden;
+}
+.vbox .big{font-family:var(--display);font-size:46px;letter-spacing:.01em}
+.vbox .sm{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--ink3);margin-top:8px}
+.meta{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--ink3);text-transform:uppercase}
+
+/* ---------------- sections ---------------- */
+.section{padding:88px 0 0;border-top:1px solid var(--line);margin-top:88px}
+.steps3{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:40px;border-top:1px solid var(--line)}
+.step3{padding:28px 28px 0 0;border-right:1px solid var(--line)}
+.step3:last-child{border-right:0}
+.step3 .n{font-family:var(--display);font-size:44px;color:var(--brand);line-height:1;margin-bottom:14px}
+.step3 .h{font-size:15.5px;font-weight:600;margin-bottom:6px}
+.step3 p{font-size:13.5px;color:var(--ink2)}
+.linkmore{
+  display:inline-flex;align-items:center;gap:8px;margin-top:26px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink);
+  border-bottom:1px solid var(--brand);padding-bottom:4px;
+}
+.linkmore:hover{color:var(--brand)}
+
+/* pricing */
+.pricerow{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:40px;border:1px solid var(--line)}
+.pricecol{padding:30px 26px;border-right:1px solid var(--line);position:relative}
+.pricecol:last-child{border-right:0}
+.pricecol.best{background:var(--bg2)}
+.pricecol .q{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+.pricecol .p{font-family:var(--display);font-size:52px;line-height:1;margin:14px 0 8px}
+.pricecol .e{font-size:12.5px;color:var(--ink3)}
+.pricecol .badge{
+  position:absolute;top:14px;right:14px;background:var(--brand);color:var(--on-brand);
+  font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;padding:3px 7px;font-weight:500;
+}
+
+/* faq */
+.faqlist{margin-top:34px;border-top:1px solid var(--line)}
+.q{border-bottom:1px solid var(--line);padding:20px 0}
+.qt{
+  font-size:15.5px;font-weight:500;cursor:pointer;display:flex;justify-content:space-between;
+  align-items:center;gap:18px;
+}
+.qt:hover{color:var(--brand)}
+.qa{font-size:14px;color:var(--ink2);margin-top:12px;display:none;max-width:70ch;line-height:1.7}
+.q.open .qa{display:block}
+.plus{color:var(--brand);font-family:var(--mono);font-size:15px;flex:none;transition:transform .2s}
+.q.open .plus{transform:rotate(45deg)}
+
+/* ---------------- account chip ---------------- */
+.uchip{
+  display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink2);
+  border:1px solid var(--line2);border-radius:2px;padding:5px 11px 5px 6px;max-width:190px;
+}
+.uchip img{width:21px;height:21px;object-fit:cover;flex:none}
+.uchip .ini{
+  width:21px;height:21px;background:var(--brand);color:var(--on-brand);flex:none;
+  display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
+}
+.uchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.uchip .fbadge{
+  flex:none;font-family:var(--mono);font-size:9px;font-weight:500;background:var(--brand);
+  color:var(--on-brand);padding:1px 5px;letter-spacing:.06em;
+}
+
+.hide{display:none}
+@media(max-width:940px){
+  .hero-grid{grid-template-columns:1fr;gap:34px}
+  .stage{grid-template-columns:1fr}
+  .stage-info{border-left:0;border-top:1px solid var(--line)}
+  .stage-video{min-height:300px}
+  .grid3,.grid4,.packs,.steps3,.pricerow{grid-template-columns:1fr}
+  .step3{border-right:0;border-bottom:1px solid var(--line);padding:22px 0}
+  .pricecol{border-right:0;border-bottom:1px solid var(--line)}
+  .stepper{flex-wrap:wrap;gap:0}
+  .st{flex:1 1 50%}
+  .uchip span{display:none}
+}
+</style>
 </head>
 <body>
 
-<header class="nav">
-  <div class="container nav-inner">
-    <a class="logo" href="#top">🎤 <span>RapDuet<span class="accent">.AI</span></span></a>
-    <nav class="nav-links">
-      <a href="#generator" data-i18n="nav_create">开始创作</a>
-      <a href="#styles" data-i18n="nav_styles">风格示例</a>
-      <a href="#how" data-i18n="nav_how">使用流程</a>
-      <a href="#pricing" data-i18n="nav_pricing">视频包</a>
-      <a href="#faq" data-i18n="nav_faq">常见问题</a>
+<header class="site-head">
+  <div class="wrap navbar">
+    <a class="brandmark" href="/">
+      <span class="tile">RV</span>
+      <span class="word">Rap<i>Video</i></span>
+    </a>
+    <nav class="navlinks">
+      <a href="#make">Generator</a>
+      <a href="#examples">Examples</a>
+      <a href="#how">How it works</a>
+      <a href="#pricing">Pricing</a>
     </nav>
-    <div class="nav-actions">
-      <span class="allowance-chip" id="allowanceChip" title="剩余可用视频数">🎟 <span id="allowanceNum">–</span></span>
-      <button class="btn-ghost" id="langToggle">EN</button>
+    <div class="navuser">
+      <a class="btn btn-sm" href="/my-videos.html" id="myVideosLink" style="display:none">My videos</a>
+      <span class="uchip" id="userChip" style="display:none"></span>
+      <button class="btn btn-sm btn-ghost" id="outBtn" style="display:none" onclick="signOut()">Sign out</button>
+      <a class="btn btn-sm btn-p" href="/auth.html" id="signInLink">Sign in</a>
     </div>
   </div>
 </header>
 
-<main id="top">
-
-  <!-- HERO -->
+<main>
+  <!-- ============ HERO ============ -->
   <section class="hero">
-    <div class="container hero-inner">
-      <p class="eyebrow">MINIMAX H3 · 768P · AI 原创人声与伴奏 · 一次性视频包，无订阅</p>
-      <h1 data-i18n="hero_title">你的照片，<br>一首原创说唱二重唱</h1>
-      <p class="hero-sub" data-i18n="hero_sub">上传两张人像或一张合影，选一个舞台、一种场合，AI 为你们写出专属歌词、唱出原创 Beat，生成 12 秒可分享的说唱视频。分享前请确认肖像、歌词与口型效果。</p>
-      <div class="hero-cta">
-        <a class="btn btn-primary" href="#generator" data-i18n="hero_cta">立即生成说唱视频</a>
-        <a class="btn btn-ghost" href="#styles" data-i18n="hero_cta2">先看风格示例</a>
-      </div>
+    <div class="wrap">
       <div class="hero-grid">
-        <div class="hero-card hc1"><div class="hero-card-label">录音棚 · Studio</div></div>
-        <div class="hero-card hc2"><div class="hero-card-label">橙色录音棚 · Booth</div></div>
-        <div class="hero-card hc3"><div class="hero-card-label">街头 Cypher</div></div>
-        <div class="hero-card hc4"><div class="hero-card-label">生日同台 · Birthday</div></div>
+        <div>
+          <div class="eyebrow">AI Rap Video Generator</div>
+          <h1>Make your photo<br><span class="y">drop a verse</span></h1>
+          <p class="lead">A topic, one or two photos, fifteen seconds. We write six clean lines, cut an original beat and lip-sync your performer. Review the bars before you pay a cent.</p>
+          <div class="hero-cta">
+            <a class="btn btn-p" href="#make" style="padding:15px 26px">Make your rap video</a>
+            <a class="btn" href="#examples" style="padding:15px 22px">Hear an example</a>
+          </div>
+          <div class="hero-meta">
+            <span>Lyrics free to preview</span>
+            <span>15s &middot; 9:16 &middot; HD MP4</span>
+            <span>Photos deleted in 7 days</span>
+          </div>
+        </div>
       </div>
-      <p class="hero-note" data-i18n="hero_note">↑ 四个独立制作的示例场景 · 点击任一卡片可带入创作面板</p>
+    </div>
+
+    <!-- topic marquee -->
+    <div class="marquee" aria-hidden="true">
+      <div class="mtrack" id="mtrack"></div>
     </div>
   </section>
 
-  <!-- GENERATOR -->
-  <section class="section" id="generator">
-    <div class="container">
-      <p class="kicker">PHOTO TO VIDEO</p>
-      <h2 data-i18n="gen_title">创作你的 AI 说唱二重唱</h2>
-      <p class="section-sub" data-i18n="gen_sub">把两个人带进一首原创说唱。选择照片、舞台与场合，剩下的交给 AI。</p>
+  <!-- ============ SHOWCASE / EXAMPLES ============ -->
+  <section class="showcase" id="examples">
+    <div class="wrap">
+      <div class="show-head">
+        <div>
+          <div class="eyebrow">Made with this pipeline</div>
+          <h2 style="margin-top:14px">Not a mockup</h2>
+        </div>
+        <div class="chipbar">
+          <button class="cbtn" onclick="stepCh(-1)" aria-label="Previous example">&#8592;</button>
+          <button class="cbtn" onclick="stepCh(1)" aria-label="Next example">&#8594;</button>
+        </div>
+      </div>
 
-      <div class="generator card">
-        <!-- 照片 -->
-        <div class="gen-block">
-          <div class="gen-head">
-            <h3 data-i18n="gen_photos">你的照片</h3>
-            <div class="seg" id="photoMode">
-              <button class="seg-btn active" data-mode="two" data-i18n="seg_two">两张人像</button>
-              <button class="seg-btn" data-mode="one" data-i18n="seg_one">一张合影</button>
+      <div class="stage">
+        <div class="stage-video">
+          <div class="badges">
+            <span class="bdg solid" id="stageCh">CH 01</span>
+            <span class="bdg">AI-made</span>
+            <span class="bdg">HD</span>
+          </div>
+          <video id="stageVid" src="/examples/example-1.mp4" muted loop playsinline autoplay preload="metadata"></video>
+          <button class="snd-btn" onclick="toggleSound(this)">Sound on</button>
+        </div>
+        <div class="stage-info">
+          <div class="eyebrow">Example</div>
+          <div class="tn" id="stageName">—</div>
+          <p id="stageDesc">—</p>
+          <div class="spec">
+            <div><span>Performer</span><span id="specMode">Solo</span></div>
+            <div><span>Beat</span><span id="specBeat">Bounce</span></div>
+            <div><span>Length</span><span>15 seconds</span></div>
+            <div><span>Output</span><span>9:16 MP4, sound</span></div>
+          </div>
+          <a class="btn btn-p" href="#make" style="margin-top:20px">Make one like this</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MAKER ============ -->
+  <section class="make" id="make">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow">Make your rap video</div>
+        <h2>Your photo,<br>your idea</h2>
+        <p class="lead">Four decisions, then the bars are written. Nothing is charged until you have read all six lines.</p>
+      </div>
+
+      <div class="stepper" id="stepper">
+        <div class="st on"><span class="stn">1</span>Topic &amp; photos</div>
+        <div class="st"><span class="stn">2</span>Review bars</div>
+        <div class="st"><span class="stn">3</span>Payment</div>
+        <div class="st"><span class="stn">4</span>Render</div>
+      </div>
+
+      <!-- STEP 1 -->
+      <div id="s0">
+        <div class="block">
+          <div class="block-h"><span class="n">01</span><span class="t">The rapper</span><span class="s">Photo</span></div>
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div class="seg">
+              <button class="on" onclick="setMode('solo',this)">Solo</button>
+              <button onclick="setMode('duo',this)">Duo</button>
             </div>
+            <span style="font-size:12.5px;color:var(--ink3)">One consenting adult, pet or original character</span>
           </div>
-          <div class="photo-row">
-            <label class="photo-slot" id="slot1">
-              <input type="file" accept="image/jpeg,image/png,image/webp" hidden>
-              <div class="photo-empty"><span class="plus">＋</span><span data-i18n="add_photo">添加照片</span></div>
-              <span class="photo-tag" data-i18n="person1">人物 1</span>
-            </label>
-            <label class="photo-slot one-only hidden" id="slot2">
-              <input type="file" accept="image/jpeg,image/png,image/webp" hidden>
-              <div class="photo-empty"><span class="plus">＋</span><span data-i18n="add_photo">添加照片</span></div>
-              <span class="photo-tag" data-i18n="person2">人物 2</span>
-            </label>
-            <label class="photo-slot one-only hidden" id="slotBoth">
-              <input type="file" accept="image/jpeg,image/png,image/webp" hidden>
-              <div class="photo-empty"><span class="plus">＋</span><span data-i18n="add_together">添加合影</span></div>
-              <span class="photo-tag" data-i18n="both">双人合影</span>
-            </label>
-          </div>
-          <p class="hint" data-i18n="photo_hint">JPG / PNG / WebP · 每张不超过 2 MB · 两名成年人、面部清晰、光线均匀</p>
+          <div class="slots" id="slots"></div>
+          <p class="hint">My photo or my pet, or an adult who agreed. No children or celebrities.</p>
         </div>
 
-        <!-- 舞台 & 场合 -->
-        <div class="gen-block two-col">
-          <div>
-            <h3 data-i18n="gen_stage">选择舞台</h3>
-            <div class="chip-group" id="stageGroup"></div>
+        <div class="block">
+          <div class="block-h"><span class="n">02</span><span class="t">The bars</span><span class="s">Free preview</span></div>
+          <textarea id="topic" rows="3" maxlength="200" placeholder="What is the rap about?" oninput="cnt()"></textarea>
+          <div class="cnt"><span id="cc">0</span>/200</div>
+          <div class="chips">
+            <button class="chip" onclick="useChip(this)">My cat who hates Mondays</button>
+            <button class="chip" onclick="useChip(this)">Birthday bars for my best friend</button>
+            <button class="chip" onclick="useChip(this)">My dog runs this house</button>
+            <button class="chip" onclick="useChip(this)">A bar for the dev team that shipped it anyway</button>
+            <button class="chip" onclick="useChip(this)">Quit my job, bought a van, no regrets</button>
+            <button class="chip" onclick="useChip(this)">Roommates, four years, one broken couch</button>
           </div>
-          <div>
-            <h3 data-i18n="gen_occasion">选择场合</h3>
-            <div class="chip-group" id="occasionGroup"></div>
-          </div>
-        </div>
-        <div class="gen-block">
-          <h3 data-i18n="gen_lang">说唱语言</h3>
-          <div class="chip-group" id="langGroup"></div>
-        </div>
-
-        <!-- 画幅 -->
-        <div class="gen-block">
-          <h3 data-i18n="gen_format">画幅与细节</h3>
-          <div class="format-row">
-            <div class="seg" id="formatSeg">
-              <button class="seg-btn active" data-format="9:16"><b>9:16</b> <span data-i18n="fmt_portrait">竖屏</span></button>
-              <button class="seg-btn" data-format="1:1"><b>1:1</b> <span data-i18n="fmt_square">方形</span></button>
-              <button class="seg-btn" data-format="16:9"><b>16:9</b> <span data-i18n="fmt_landscape">横屏</span></button>
-            </div>
-            <p class="hint" data-i18n="format_hint">12 秒 · 768P · AI 原创人声与伴奏</p>
-          </div>
+          <p class="hint">We write six clean lines for free. You see them before paying.</p>
         </div>
 
-        <!-- 个人化 -->
-        <div class="gen-block">
-          <h3 data-i18n="gen_personal">让说唱更私人</h3>
-          <textarea id="personalDetail" maxlength="300" rows="3"
-            data-i18n-ph="personal_ph" placeholder="写一个名字、一段故事或一句想唱进去的话，例如：给阿琳的生日，我们在天台上唱过歌"></textarea>
-          <label class="consent">
-            <input type="checkbox" id="consentCheck">
-            <span data-i18n="consent">两位表演者均为成年人，且我已获得使用其照片制作本 AI 视频的许可。</span>
-          </label>
+        <div class="block">
+          <div class="block-h"><span class="n">03</span><span class="t">The beat</span><span class="s">Pick one</span></div>
+          <div class="grid3" id="beats"></div>
         </div>
 
-        <div class="gen-actions">
-          <button class="btn btn-primary btn-lg" id="generateBtn" data-i18n="gen_btn">生成说唱视频</button>
-          <p class="hint" data-i18n="gen_privacy">照片仅在点击生成后上传，将与你的创作指令一起发送给 AI 服务商。生成结果请先审阅再分享。</p>
+        <div class="block">
+          <div class="block-h"><span class="n">04</span><span class="t">Scene</span><span class="s">Lighting &amp; set</span></div>
+          <div class="grid4" id="scenes"></div>
         </div>
 
-        <!-- 任务进度 / 结果 -->
-        <div class="task-panel hidden" id="taskPanel">
-          <div class="task-status">
-            <span class="spinner"></span>
-            <span id="taskStatusText">准备中…</span>
+        <div class="submit-row">
+          <button class="btn btn-p btn-lg" id="writeBtn" onclick="writeLyrics()">Write my lyrics &middot; free</button>
+          <p class="hint" style="text-align:center" id="writeHint">Add a photo to each slot first. Lyrics are free.</p>
+        </div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div id="s1" class="hide">
+        <div class="block" style="border-top:0;padding-top:0">
+          <div class="block-h"><span class="n">&#10003;</span><span class="t">Six clean lines</span><span class="s">Edit anything</span></div>
+          <div class="lyr fade"><ol id="lyrics" contenteditable="true"></ol></div>
+          <div class="rowend">
+            <button class="btn" onclick="writeLyrics()">Rewrite</button>
+            <button class="btn btn-p" onclick="go(2)">Use these lines &rarr;</button>
           </div>
-          <div class="task-error hidden" id="taskError"></div>
-          <div class="task-result hidden" id="taskResult">
-            <video id="resultVideo" controls playsinline></video>
-            <a class="btn btn-primary" id="downloadBtn" download data-i18n="download">下载视频</a>
+          <p class="hint">Unsafe content is refused and ordinary profanity is rewritten clean. Wording can change to fit the beat.</p>
+        </div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div id="s2" class="hide">
+        <div class="block" style="border-top:0;padding-top:0">
+          <div class="block-h"><span class="n">05</span><span class="t">Choose a pack</span><span class="s">One-time</span></div>
+          <div class="packs" id="packs"></div>
+          <div class="order">
+            <div class="orow"><span id="oItem">1 HD video</span><span id="oItemP">$9.99</span></div>
+            <div class="orow"><span>Taxes</span><span>Calculated at checkout</span></div>
+            <div class="orow tot"><span>Total</span><span id="oTotal">$9.99</span></div>
           </div>
+          <div style="margin-top:18px">
+            <button class="btn btn-p btn-lg" id="payBtn" onclick="pay()">Pay $9.99</button>
+            <div class="secure" id="secureNote">Secured payment via Waffo &middot; cards, Apple Pay, Google Pay</div>
+          </div>
+          <p class="hint" style="text-align:center">Confirmed failures return the video credit.</p>
+        </div>
+      </div>
+
+      <!-- STEP 4 -->
+      <div id="s3" class="hide">
+        <div class="block" style="border-top:0;padding-top:0">
+          <div class="block-h"><span class="n">06</span><span class="t">Rendering</span><span class="s">~6 min</span></div>
+          <ul class="plist" id="plist"></ul>
+          <div class="bar"><i id="bar"></i></div>
+          <div style="text-align:center;margin-top:22px">
+            <button class="btn btn-sm" onclick="finish()">Skip the wait</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="s4" class="hide">
+        <div class="result">
+          <div class="eyebrow" style="justify-content:center">Done</div>
+          <h2 style="margin:16px 0 0">Your video is ready</h2>
+          <div class="vbox">
+            <div class="big">0:15</div>
+            <div class="sm">9:16 &middot; MP4</div>
+          </div>
+          <p class="meta" id="rmeta">Vertical 9:16 &middot; HD &middot; with sound</p>
+          <div style="display:flex;gap:10px;justify-content:center;margin-top:24px;flex-wrap:wrap">
+            <button class="btn btn-p" onclick="alert('In production this returns the real MP4 download URL.')">Download video</button>
+            <button class="btn" onclick="location.reload()">Make another</button>
+          </div>
+          <p class="hint">Photos auto-delete in 7 days.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- STYLES -->
-  <section class="section alt" id="styles">
-    <div class="container">
-      <p class="kicker">STUDIO PREVIEW</p>
-      <h2 data-i18n="styles_title">为两个人打造的录音棚</h2>
-      <p class="section-sub" data-i18n="styles_sub">四个原创方向示例。点击任意风格，把这条导演思路带入创作面板。</p>
-      <div class="style-grid">
-        <button class="style-card sc1" data-preset="studio,duet"><h3 data-i18n="style1">聚光灯二重唱</h3><p data-i18n="style1_d">近景机位、专注的录音棚光线，放松的肩部与细腻手势。</p><span class="use-dir" data-i18n="use_dir">用这条方向 →</span></button>
-        <button class="style-card sc2" data-preset="booth,duet"><h3 data-i18n="style2">全景录音棚</h3><p data-i18n="style2_d">广角展现整个录音棚，两人分立麦克风两侧呼应。</p><span class="use-dir" data-i18n="use_dir">用这条方向 →</span></button>
-        <button class="style-card sc3" data-preset="street,battle"><h3 data-i18n="style3">前排能量</h3><p data-i18n="style3_d">街头 cypher 氛围，环绕机位，最具感染力的现场感。</p><span class="use-dir" data-i18n="use_dir">用这条方向 →</span></button>
-        <button class="style-card sc4" data-preset="studio,birthday"><h3 data-i18n="style4">生日双人组</h3><p data-i18n="style4_d">为生日定制的高能量说唱祝福，庆祝气氛拉满。</p><span class="use_dir use-dir" data-i18n="use_dir">用这条方向 →</span></button>
+  <!-- ============ HOW ============ -->
+  <section class="section" id="how">
+    <div class="wrap">
+      <div class="eyebrow">Process</div>
+      <h2 style="margin:16px 0 12px">How to make<br>an AI rap video</h2>
+      <p class="lead">No filming, no recording, no editing software.</p>
+      <div class="steps3">
+        <div class="step3">
+          <div class="n">01</div>
+          <div class="h">Write a topic</div>
+          <p>Bring an idea or your own lines. You review six clean lines before anything else happens.</p>
+        </div>
+        <div class="step3">
+          <div class="n">02</div>
+          <div class="h">Add photos</div>
+          <p>One or two performers, a pet, or an original character. One person per photo.</p>
+        </div>
+        <div class="step3">
+          <div class="n">03</div>
+          <div class="h">Make your video</div>
+          <p>We cut the beat, sing the bars and lip-sync the shot. Download a vertical MP4 with sound.</p>
+        </div>
       </div>
+      <a class="linkmore" href="#make">Start with a topic &rarr;</a>
     </div>
   </section>
 
-  <!-- MODELS -->
-  <section class="section">
-    <div class="container">
-      <p class="kicker">TRANSPARENCY</p>
-      <h2 data-i18n="models_title">视频背后的 AI 模型</h2>
-      <div class="model-cards">
-        <div class="card model-card"><b>Minimax H3</b><span data-i18n="m1">你的视频 · 12 秒 · 768P · 原生 AI 音频</span></div>
-        <div class="card model-card"><b>DeepSeek</b><span data-i18n="m2">创作指令生成与内容预审（歌词方向）</span></div>
-        <div class="card model-card"><b>SeeAPI</b><span data-i18n="m3">统一 API 网关 · 模型接入来源</span></div>
-      </div>
-      <p class="hint" data-i18n="models_note">提交前，文字指令会先经 DeepSeek 预审；未通过审查的内容不会开始生成、不消耗额度。模型版本：minimax-h3 / text-to-video · SeeAPI。</p>
-    </div>
-  </section>
-
-  <!-- HOW -->
-  <section class="section alt" id="how">
-    <div class="container">
-      <p class="kicker">HOW IT WORKS</p>
-      <h2 data-i18n="how_title">从照片到专属二重唱</h2>
-      <div class="steps">
-        <div class="step"><span class="step-num">1</span><h3 data-i18n="how1_t">添加照片</h3><p data-i18n="how1_d">两张清晰的人像，或一张双人合影。光线均匀、双眼可见、面部清晰，效果最佳。</p></div>
-        <div class="step"><span class="step-num">2</span><h3 data-i18n="how2_t">选舞台，写细节</h3><p data-i18n="how2_d">四个舞台 × 四种场合，中英文说唱任选。加一个名字或共同回忆，让歌词只属于你们。</p></div>
-        <div class="step"><span class="step-num">3</span><h3 data-i18n="how3_t">生成、试听、下载</h3><p data-i18n="how3_d">AI 生成 12 秒 768P 二重唱视频，完成后在"我的作品"中试听与下载。分享前请完整审阅。</p></div>
-      </div>
-
-      <!-- 我的作品 -->
-      <div class="my-works">
-        <h3 data-i18n="works_title">🎞 我的作品</h3>
-        <div id="worksList" class="works-list"><p class="hint" data-i18n="works_empty">还没有作品，去生成第一条说唱视频吧。</p></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- PRICING -->
+  <!-- ============ PRICING ============ -->
   <section class="section" id="pricing">
-    <div class="container">
-      <p class="kicker">PRICING</p>
-      <h2 data-i18n="pricing_title">选择你的视频包</h2>
-      <p class="section-sub" data-i18n="pricing_sub">一次性付费，无订阅、无自动续费，额度 365 天有效。</p>
-      <div class="pricing-grid">
-        <div class="card price-card">
-          <h3 data-i18n="pack_lite">体验版</h3>
-          <p class="price"><b>$4.90</b><span data-i18n="onetime">/ 一次性</span></p>
-          <p class="pack-videos" data-i18n="lite_v">1 个视频 · 365 天有效</p>
-          <button class="btn btn-ghost pack-btn" data-pack="lite" data-i18n="choose">选择视频包</button>
+    <div class="wrap">
+      <div class="eyebrow">Pricing</div>
+      <h2 style="margin:16px 0 12px">Your AI rapper,<br>your idea</h2>
+      <p class="lead">People, pets or original characters. One performer or a duo, three original beats, four scene presets. 15 seconds, vertical 9:16, HD MP4 with sound. One-time payment, no subscription.</p>
+      <div class="pricerow">
+        <div class="pricecol">
+          <div class="q">1 HD video</div>
+          <div class="p">$9.99</div>
+          <div class="e">$9.99 each</div>
         </div>
-        <div class="card price-card featured">
-          <span class="badge" data-i18n="popular">最受欢迎</span>
-          <h3 data-i18n="pack_pro">进阶版</h3>
-          <p class="price"><b>$8.90</b><span data-i18n="onetime">/ 一次性</span></p>
-          <p class="pack-videos" data-i18n="pro_v">2 个视频 · 365 天有效</p>
-          <button class="btn btn-primary pack-btn" data-pack="pro" data-i18n="choose">选择视频包</button>
+        <div class="pricecol best">
+          <div class="badge">Best value</div>
+          <div class="q">3 HD videos</div>
+          <div class="p">$19.99</div>
+          <div class="e">$6.66 each</div>
         </div>
-        <div class="card price-card">
-          <h3 data-i18n="pack_ultra">畅享版</h3>
-          <p class="price"><b>$19.90</b><span data-i18n="onetime">/ 一次性</span></p>
-          <p class="pack-videos" data-i18n="ultra_v">5 个视频 · 365 天有效</p>
-          <button class="btn btn-ghost pack-btn" data-pack="ultra" data-i18n="choose">选择视频包</button>
+        <div class="pricecol">
+          <div class="q">5 HD videos</div>
+          <div class="p">$29.99</div>
+          <div class="e">$6.00 each</div>
         </div>
       </div>
-      <p class="hint" data-i18n="pricing_note">每个视频均为 12 秒、768P、带 AI 人声与伴奏的说唱二重唱，由 Minimax H3 生成。生成失败的任务将自动返还额度。支付由 Pancake（Waffo）安全处理，支持全球主流支付方式，一次性买断、无订阅。</p>
+      <a class="linkmore" href="#make">Choose a pack &rarr;</a>
     </div>
   </section>
 
-  <!-- FAQ -->
-  <section class="section alt" id="faq">
-    <div class="container narrow">
-      <p class="kicker">FAQ</p>
-      <h2 data-i18n="faq_title">AI 说唱视频常见问题</h2>
-      <div class="faq-list">
-        <details><summary data-i18n="q1">在这里生成 AI 说唱视频最简单的方式是什么？</summary><p data-i18n="a1">选择视频包，上传两张人像或一张合影，选好舞台、场合与语言，写一句个人细节，即可生成 12 秒 768P 二重唱视频，并在"我的作品"中查看。</p></details>
-        <details><summary data-i18n="q2">可以上传我自己的歌吗？</summary><p data-i18n="a2">本流程不接受音频文件。AI 会围绕你选择的主题创作全新的歌词、人声与伴奏，你可以在下载后用自行持有版权的音频再剪辑。</p></details>
-        <details><summary data-i18n="q3">能使用精确歌词或还原某位歌手的声音吗？</summary><p data-i18n="a3">不能。你可以提供名字、故事或短语作为主题，但精确歌词与口型对齐不保证，也不支持录音上传或单独的音频驱动口型控制。</p></details>
-        <details><summary data-i18n="q4">这是免费的 AI 说唱视频生成器吗？</summary><p data-i18n="a4">正式版为一次性付费视频包，不订阅、不自动续费。当前演示环境提供少量体验额度，可直接试用。</p></details>
-        <details><summary data-i18n="q5">可以发布到 TikTok 或 YouTube Shorts 吗？</summary><p data-i18n="a5">可以。选择 9:16 竖屏画幅，完整审阅视频与音频后下载即可。发布文案与平台规则请在发布平台内自行处理，并按需标注 AI 生成。</p></details>
-        <details><summary data-i18n="q6">生成失败怎么办？</summary><p data-i18n="a6">确认失败的任务会自动返还视频额度，可重新调整照片或指令后再次生成。</p></details>
+  <!-- ============ FAQ ============ -->
+  <section class="section" id="faq">
+    <div class="wrap">
+      <div class="eyebrow">Questions</div>
+      <h2 style="margin:16px 0 0">Read before you pay</h2>
+      <div class="faqlist">
+        <div class="q"><div class="qt" onclick="tq(this)">What is an AI rap video generator?<span class="plus">+</span></div><div class="qa">Turn a topic or your own lyrics and one or two photos into a short lip-sync rap video with an original beat.</div></div>
+        <div class="q"><div class="qt" onclick="tq(this)">Can I use my own lyrics?<span class="plus">+</span></div><div class="qa">Yes. Paste your lines, then review six clean lines before paying. Unsafe content is refused and ordinary profanity is rewritten clean. Wording can change to fit the beat.</div></div>
+        <div class="q"><div class="qt" onclick="tq(this)">Can my AI rapper be a pet or character?<span class="plus">+</span></div><div class="qa">Yes. Use your pet, an original character, yourself or an adult who agreed. No children or celebrities.</div></div>
+        <div class="q"><div class="qt" onclick="tq(this)">What do I get?<span class="plus">+</span></div><div class="qa">A 15-second vertical HD MP4 with sound. An AI rap song with six clean lines, lip-sync and a choice of three original beats.</div></div>
+        <div class="q"><div class="qt" onclick="tq(this)">How much does it cost?<span class="plus">+</span></div><div class="qa">1 video for $9.99, 3 for $19.99, or 5 for $29.99. No subscription. Confirmed failures return the video credit.</div></div>
+        <div class="q"><div class="qt" onclick="tq(this)">How long do you keep my photos?<span class="plus">+</span></div><div class="qa">Photos are auto-deleted after 7 days, or you can delete them right away. Finished videos stay available for 30 days.</div></div>
       </div>
     </div>
   </section>
-
-  <!-- CTA -->
-  <section class="cta-band">
-    <div class="container">
-      <h2 data-i18n="cta_title">用你自己的方向，创作 AI 说唱二重唱</h2>
-      <a class="btn btn-primary btn-lg" href="#generator" data-i18n="cta_btn">开始创作</a>
-    </div>
-  </section>
-
 </main>
 
-<footer class="footer">
-  <div class="container footer-inner">
-    <span>🎤 RapDuet.AI — <span data-i18n="footer_tag">双人说唱，一键成片</span></span>
-    <span class="hint" data-i18n="footer_note">生成内容由 AI 制作 · 请在分享前确认肖像授权并遵守平台规则</span>
+<footer class="site-foot">
+  <div class="wrap">
+    <div class="footgrid">
+      <div>
+        <a class="brandmark" href="/" style="margin-bottom:14px">
+          <span class="tile">RV</span>
+          <span class="word">Rap<i>Video</i></span>
+        </a>
+        <p style="font-size:13px;color:var(--ink3);max-width:30ch;line-height:1.7">AI rap videos from a topic and a photo. Made in the browser, delivered as MP4.</p>
+      </div>
+      <div>
+        <h4>Make</h4>
+        <a href="#make">Generator</a>
+        <a href="#examples">Examples</a>
+        <a href="#pricing">Pricing</a>
+        <a href="/my-videos.html">My videos</a>
+      </div>
+      <div>
+        <h4>Learn</h4>
+        <a href="#how">How it works</a>
+        <a href="#faq">Questions</a>
+        <a href="/legal/terms.html">Terms</a>
+        <a href="/legal/refund.html">Refunds</a>
+      </div>
+      <div>
+        <h4>Company</h4>
+        <a href="/legal/privacy.html">Privacy</a>
+        <a href="mailto:support@rapvideo.xyz">support@rapvideo.xyz</a>
+      </div>
+    </div>
+    <div class="footnote">
+      <span>Payments by Waffo &middot; cards, Apple Pay, Google Pay</span>
+      <span>Photos auto-deleted after 7 days &middot; &copy; 2026 Rap Video</span>
+    </div>
   </div>
 </footer>
 
-<script src="app.js"></script>
+<script>
+/* ---------- config / state ---------- */
+var CONFIG = { apiBase:'/api', provider:'waffo' };
+var S = { mode:'solo', photos:[null,null], files:[null,null], beat:'bounce', scene:'booth', pack:0, lyrics:[] };
+
+var BEATS = [
+  {id:'bounce', nm:'Street &middot; Bounce', ds:'Springy, built for jokes'},
+  {id:'boombap', nm:'Boom Bap', ds:'Old-school swing'},
+  {id:'trap', nm:'Trap', ds:'Heavy 808s'}
+];
+var SCENES = [
+  {id:'booth', nm:'Booth', ds:'Mic and cans'},
+  {id:'street', nm:'Street', ds:'Brick and tags'},
+  {id:'stage', nm:'Stage', ds:'Lights and crowd'},
+  {id:'rooftop', nm:'Rooftop', ds:'Golden hour'}
+];
+var PACKS = [
+  {n:1, sku:'single', label:'1 HD video', p:'$9.99', each:'$9.99', tag:''},
+  {n:3, sku:'3pack', label:'3 HD videos', p:'$19.99', each:'$6.66 each', tag:'Best value'},
+  {n:5, sku:'5pack', label:'5 HD videos', p:'$29.99', each:'$6.00 each', tag:''}
+];
+
+/* two real clips, same files the examples section used to show */
+var SHOWCASE = [
+  {src:'/examples/example-1.mp4', name:'My cat who hates Mondays', mode:'Solo', beat:'Boom Bap',
+   desc:'A pet that refuses to work on a Monday, framed like a late-night studio session.'},
+  {src:'/examples/example-2.mp4', name:'Night shift, still grinding', mode:'Solo', beat:'Trap',
+   desc:'Six clean lines about the night shift, cut to heavy 808s and a single held frame.'}
+];
+var chIdx = 0;
+
+/* ---------- api ---------- */
+function postJSON(path, payload){
+  return fetch(CONFIG.apiBase + path, {
+    method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)
+  }).then(function(r){ return r.json(); });
+}
+
+/* ---------- showcase ---------- */
+function paintCh(){
+  var c = SHOWCASE[chIdx];
+  var v = document.getElementById('stageVid');
+  var wasOn = v && !v.muted;
+  v.src = c.src;
+  v.muted = true;
+  v.play().catch(function(){});
+  document.getElementById('stageCh').textContent = 'CH 0' + (chIdx + 1);
+  document.getElementById('stageName').textContent = '\u201C' + c.name + '\u201D';
+  document.getElementById('stageDesc').textContent = c.desc;
+  document.getElementById('specMode').textContent = c.mode;
+  document.getElementById('specBeat').textContent = c.beat;
+  document.querySelectorAll('.snd-btn').forEach(function(b){ b.textContent = 'Sound on'; });
+  if(wasOn) document.querySelectorAll('video').forEach(function(x){ x.muted = false; });
+}
+function stepCh(d){
+  chIdx = (chIdx + d + SHOWCASE.length) % SHOWCASE.length;
+  paintCh();
+}
+function toggleSound(btn){
+  var box = btn.closest('.stage-video');
+  var v = box.querySelector('video');
+  v.muted = !v.muted;
+  if(!v.muted) v.play().catch(function(){});
+  document.querySelectorAll('.stage-video video').forEach(function(o){
+    if(o !== v){ o.muted = true; }
+  });
+  document.querySelectorAll('.snd-btn').forEach(function(b){
+    b.textContent = (b.closest('.stage-video').querySelector('video').muted) ? 'Sound on' : 'Sound off';
+  });
+}
+
+/* ---------- marquee of topics ---------- */
+var TOPICS = [
+  'My cat who hates Mondays','Birthday bars for my best friend','My dog runs this block',
+  'Ten more minutes, let me sleep','Quit my job, bought a van','Roommates and one broken couch',
+  'Monday is cancelled, I set the date','My plants are the only witnesses','Night shift, still grinding',
+  'The group chat is my only family'
+];
+function buildMarquee(){
+  var one = TOPICS.map(function(t){
+    return '<button type="button" data-topic="' + t.replace(/"/g,'&quot;') + '">' + t + '</button>';
+  }).join('');
+  document.getElementById('mtrack').innerHTML = one + one;
+  document.getElementById('mtrack').addEventListener('click', function(e){
+    var b = e.target.closest('[data-topic]');
+    if(!b) return;
+    document.getElementById('topic').value = b.dataset.topic;
+    cnt();
+    document.getElementById('make').scrollIntoView({behavior:'smooth', block:'start'});
+    document.getElementById('topic').focus();
+  });
+}
+
+/* ---------- render ---------- */
+function renderSlots(){
+  var n = S.mode === 'solo' ? 1 : 2;
+  var html = '';
+  for(var i=0;i<n;i++){
+    if(S.photos[i]){
+      html += '<div class="slot"><img src="'+S.photos[i]+'">'
+            + '<button class="x" onclick="delPhoto('+i+')">&times;</button></div>';
+    } else {
+      html += '<div class="slot" onclick="pick('+i+')"><div class="ph">'
+        + '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.4">'
+        + '<rect x="3" y="5" width="18" height="14" rx="1"/><circle cx="12" cy="12" r="3.2"/>'
+        + '<path d="M8 5l1.2-2h5.6L16 5"/></svg>'
+        + '<div>+' + (i === 0 ? ' Add performer' : ' Add second') + '</div></div></div>';
+    }
+  }
+  document.getElementById('slots').innerHTML = html;
+}
+function pick(i){
+  var inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = function(){
+    var f = inp.files[0]; if(!f) return;
+    if(f.size > 10*1024*1024){ alert('Please use an image under 10 MB.'); return; }
+    S.files[i] = f;
+    var r = new FileReader();
+    r.onload = function(){ S.photos[i] = r.result; renderSlots(); };
+    r.readAsDataURL(f);
+  };
+  inp.click();
+}
+function delPhoto(i){ S.photos[i] = null; S.files[i] = null; renderSlots(); }
+function setMode(m, el){
+  S.mode = m;
+  el.parentNode.querySelectorAll('button').forEach(function(b){ b.classList.remove('on'); });
+  el.classList.add('on');
+  if(m === 'solo'){ S.photos[1] = null; S.files[1] = null; }
+  renderSlots();
+}
+function renderBeats(){
+  document.getElementById('beats').innerHTML = BEATS.map(function(b){
+    return '<div class="pick'+(S.beat===b.id?' on':'')+'" onclick="setBeat(\''+b.id+'\')">'
+      + (S.beat===b.id ? '<span class="tk">&#10003;</span>' : '')
+      + '<div class="nm">'+b.nm+'</div><div class="ds">'+b.ds+'</div></div>';
+  }).join('');
+}
+function setBeat(id){ S.beat = id; renderBeats(); }
+function renderScenes(){
+  document.getElementById('scenes').innerHTML = SCENES.map(function(s){
+    return '<div class="pick'+(S.scene===s.id?' on':'')+'" onclick="setScene(\''+s.id+'\')">'
+      + '<div class="nm">'+s.nm+'</div><div class="ds">'+s.ds+'</div></div>';
+  }).join('');
+}
+function setScene(id){ S.scene = id; renderScenes(); }
+function renderPacks(){
+  document.getElementById('packs').innerHTML = PACKS.map(function(p,i){
+    return '<div class="pack'+(S.pack===i?' on':'')+'" onclick="setPack('+i+')">'
+      + (p.tag ? '<div class="tag">'+p.tag+'</div>' : '')
+      + '<div class="qty">'+p.label+'</div><div class="prc">'+p.p+'</div>'
+      + '<div class="per">'+p.each+'</div></div>';
+  }).join('');
+}
+function setPack(i){ S.pack = i; renderPacks(); syncPay(); }
+function syncPay(){
+  var p = PACKS[S.pack];
+  document.getElementById('payBtn').textContent = 'Pay ' + p.p;
+  document.getElementById('oItem').textContent = p.label;
+  document.getElementById('oItemP').textContent = p.p;
+  document.getElementById('oTotal').textContent = p.p;
+  document.getElementById('secureNote').innerHTML =
+    'Secured payment via Waffo &middot; cards, Apple&nbsp;Pay, Google&nbsp;Pay';
+}
+function cnt(){ document.getElementById('cc').textContent = document.getElementById('topic').value.length; }
+function useChip(el){ document.getElementById('topic').value = el.textContent; cnt(); }
+function tq(el){ el.parentNode.classList.toggle('open'); }
+
+/* ---------- flow ---------- */
+function go(step){
+  ['s0','s1','s2','s3','s4'].forEach(function(id,i){
+    document.getElementById(id).classList.toggle('hide', i !== step);
+  });
+  document.querySelectorAll('.st').forEach(function(el,i){
+    el.classList.toggle('on', i === step);
+    el.classList.toggle('done', i < step);
+  });
+  if(step < 3) window.scrollTo({top:document.getElementById('stepper').offsetTop - 90, behavior:'smooth'});
+}
+function ready(){
+  var need = S.mode === 'solo' ? 1 : 2;
+  for(var i=0;i<need;i++) if(!S.photos[i]) return false;
+  return document.getElementById('topic').value.trim().length > 0;
+}
+function writeLyrics(){
+  if(!ready()){
+    var h = document.getElementById('writeHint');
+    h.textContent = 'Add a photo to each slot first, and tell us what it is about.';
+    h.style.color = 'var(--bad)';
+    return;
+  }
+  var btn = document.getElementById('writeBtn');
+  btn.disabled = true; btn.textContent = 'Writing bars\u2026';
+  postJSON('/lyrics', {topic:document.getElementById('topic').value, mode:S.mode})
+  .then(function(r){
+    btn.disabled = false; btn.textContent = 'Write my lyrics \u00B7 free';
+    if(!r.ok){ alert('Could not write lines. Try again.'); return; }
+    S.lyrics = r.lines;
+    document.getElementById('lyrics').innerHTML =
+      r.lines.map(function(l){ return '<li>'+l+'</li>'; }).join('');
+    go(1);
+  });
+}
+function pay(){
+  if(!ME){
+    location.href = '/auth.html?next=' + encodeURIComponent('/#make');
+    return;
+  }
+  if(!ready()){
+    alert('Add a photo to each slot first, and tell us what it is about.');
+    return;
+  }
+  var btn = document.getElementById('payBtn');
+  btn.disabled = true;
+  var fd = new FormData();
+  fd.append('topic', document.getElementById('topic').value.trim());
+  fd.append('mode', S.mode);
+  fd.append('beat', S.beat);
+  fd.append('scene', S.scene);
+  fd.append('pack', PACKS[S.pack].sku);
+  var need = S.mode === 'solo' ? 1 : 2;
+  for(var i=0;i<need;i++) fd.append('photos', S.files[i]);
+  fetch('/api/draft', {method:'POST', body: fd})
+    .then(function(r){ return r.json(); })
+    .then(function(r){
+      if(!r.ok){
+        alert(r.error || 'Something went wrong. Try again.');
+        btn.disabled = false;
+        return;
+      }
+      if(r.free){
+        window.location.href = '/success.html?o=' + encodeURIComponent(r.orderId);
+        return;
+      }
+      window.location.href = r.checkoutUrl;
+    })
+    .catch(function(e){
+      alert('Network error. Try again.');
+      btn.disabled = false;
+    });
+}
+
+/* ---------- render pipeline (local demo only) ---------- */
+var STEPS = [
+  {t:'Lock the bars to the beat'},
+  {t:'Generate vocals and beat'},
+  {t:'Lip-sync the performer'},
+  {t:'Render and package MP4'}
+];
+var timers = [];
+function startGen(){
+  go(3);
+  var i = 0;
+  document.getElementById('plist').innerHTML = STEPS.map(function(s){
+    return '<li><span class="dot"></span>'+s.t+'</li>';
+  }).join('');
+  document.getElementById('bar').style.width = '0%';
+  function run(){
+    var items = document.querySelectorAll('#plist li');
+    if(i > 0){
+      items[i-1].classList.remove('on'); items[i-1].classList.add('ok');
+      items[i-1].querySelector('.dot').textContent = '\u2713';
+    }
+    if(i >= STEPS.length){ finish(); return; }
+    items[i].classList.add('on');
+    items[i].querySelector('.dot').innerHTML = '<span class="spin"></span>';
+    document.getElementById('bar').style.width = Math.round(((i+1)/STEPS.length)*100) + '%';
+    i++;
+    timers.push(setTimeout(run, 1400));
+  }
+  run();
+}
+function finish(){
+  timers.forEach(clearTimeout); timers = [];
+  go(4);
+}
+
+/* ---------- account ---------- */
+var ME = null;
+function paintUser(u){
+  ME = u;
+  var chip = document.getElementById('userChip');
+  var out = document.getElementById('outBtn');
+  var si = document.getElementById('signInLink');
+  var mv = document.getElementById('myVideosLink');
+  if(!u){
+    chip.style.display = 'none';
+    out.style.display = 'none';
+    mv.style.display = 'none';
+    si.style.display = 'inline-flex';
+    return;
+  }
+  var label = u.name || u.email;
+  chip.textContent = '';
+  if(u.avatar){
+    var img = document.createElement('img');
+    img.src = u.avatar; img.alt = '';
+    chip.appendChild(img);
+  } else {
+    var ini = document.createElement('span');
+    ini.className = 'ini';
+    ini.textContent = (label || '?').trim().charAt(0).toUpperCase();
+    chip.appendChild(ini);
+  }
+  var nm = document.createElement('span');
+  nm.textContent = label;
+  chip.appendChild(nm);
+  if(u.freeCredits > 0){
+    var fb = document.createElement('span');
+    fb.className = 'fbadge';
+    fb.textContent = u.freeCredits + ' FREE';
+    fb.title = 'Free video credit — no checkout needed';
+    chip.appendChild(fb);
+  }
+  chip.title = u.email;
+  chip.style.display = 'inline-flex';
+  out.style.display = 'inline-flex';
+  mv.style.display = 'inline-flex';
+  si.style.display = 'none';
+}
+function signOut(){
+  fetch('/api/auth/logout', { method: 'POST' }).then(function(){ paintUser(null); });
+}
+fetch('/api/auth/me')
+  .then(function(r){ return r.json(); })
+  .then(function(r){ paintUser(r.user || null); })
+  .catch(function(){});
+
+/* ---------- init ---------- */
+buildMarquee();
+paintCh();
+renderSlots(); renderBeats(); renderScenes(); renderPacks(); syncPay();
+</script>
 </body>
 </html>

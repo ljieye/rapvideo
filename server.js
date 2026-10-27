@@ -1,488 +1,366 @@
-'use strict';
-
 /**
- * RapDuet.AI — 零依赖 Node 服务器
- * 静态站点 + API：DeepSeek（导演脚本/预审）→ SeeAPI（视频生成任务）
+ * RapVideo — single Node server. No framework magic beyond express.
+ *
+ *   npm install && node server.js      →  http://localhost:3000
+ *
+ * Flow (payment FIRST, generation second — the business never fronts API cost):
+ *   1. POST /api/lyrics          free preview, rate-limited by IP
+ *   2. POST /api/draft           photo + topic → order + Waffo checkoutUrl
+ *   3. buyer pays on Waffo
+ *   4. POST /api/webhooks/waffo  signature-verified → marks paid → queues job
+ *   5. worker runs the pipeline  lyrics → music → lip-sync → mp4
+ *   6. GET  /api/order/:id       progress page polls this
  */
+import express from 'express';
+import multer from 'multer';
+import path from 'node:path';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { WaffoPancake, verifyWebhook, WebhookEventType } from '@waffo/pancake-ts';
 
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const waffo = require('./waffo');
+import * as store from './lib/store.js';
+import * as users from './lib/users.js';
+import { PACK_META } from './lib/packs.js';
+import { adminRouter } from './lib/adminApi.js';
+import { adminToken, adminHint } from './lib/admin.js';
+import {
+  attachUser, requireUser, login, logout, parseCookies,
+  hashPassword, verifyPassword,
+  googleEnabled, googleAuthUrl, exchangeGoogleCode, googleProfile, upsertGoogleUser,
+  makeState, verifyState,
+} from './lib/auth.js';
+import { runOrder, writeLyrics, refreshCfg } from './lib/pipeline.js';
 
-// ---------- env（简单解析 .env） ----------
-function loadEnv() {
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const DATA = path.join(ROOT, 'data');
+const UPLOADS = path.join(DATA, 'uploads');
+const VIDEOS = path.join(DATA, 'videos');
+const PORT = Number(process.env.PORT || 3000);
+const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, '');
+
+// load .env (no dependency) — .env wins over inherited shell vars
+for (const line of fs.readFileSync(path.join(ROOT, '.env'), 'utf8').split('\n')) {
+  const t = line.trim();
+  if (!t || t.startsWith('#')) continue;
+  const i = t.indexOf('=');
+  if (i > 0) process.env[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+}
+
+for (const d of [DATA, UPLOADS, VIDEOS]) fs.mkdirSync(d, { recursive: true });
+store.init();
+users.init();
+users.pruneSessions();
+refreshCfg();
+
+/* ---------------- Waffo client ---------------- */
+let WAFFO_KEY = process.env.WAFFO_PRIVATE_KEY || '';
+if (WAFFO_KEY && !WAFFO_KEY.includes('-----BEGIN')) {
+  const body = WAFFO_KEY.replace(/\s+/g, '').replace(/(.{64})/g, '$1\n').trim();
+  WAFFO_KEY = `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+}
+const waffo = new WaffoPancake({ merchantId: process.env.WAFFO_MERCHANT_ID, privateKey: WAFFO_KEY });
+
+const PRODUCTS = {
+  single: process.env.WAFFO_PRODUCT_SINGLE,
+  '3pack': process.env.WAFFO_PRODUCT_3PACK,
+  '5pack': process.env.WAFFO_PRODUCT_5PACK,
+};
+
+/* ---------------- app ---------------- */
+const app = express();
+app.disable('x-powered-by');
+app.use(express.static(path.join(ROOT, 'public')));
+app.use('/videos', express.static(VIDEOS, { maxAge: '7d' }));
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 2 },
+  fileFilter: (req, f, cb) => cb(null, /^image\/(png|jpe?g|webp)$/.test(f.mimetype)),
+});
+
+/* ---------------- accounts ---------------- */
+app.use(attachUser);
+
+/* ---------------- admin panel (token-gated, separate from customer accounts) ---------------- */
+app.get('/admin', (req, res) => res.sendFile(path.join(ROOT, 'public', 'admin.html')));
+app.use('/api/admin', adminRouter({
+  queueJob,
+  getQueue: () => ({ running, queued: queue.length }),
+}));
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+
+app.get('/api/auth/me', (req, res) => {
+  res.json({
+    ok: true,
+    user: users.publicUser(req.user),
+    googleEnabled: googleEnabled(BASE_URL),
+  });
+});
+
+app.post('/api/auth/register', express.json(), (req, res) => {
   try {
-    for (const line of fs.readFileSync(path.join(__dirname, '.env'), 'utf8').split('\n')) {
-      const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
-    }
-  } catch {}
-}
-loadEnv();
+    const email = String(req.body?.email || '').trim();
+    const password = String(req.body?.password || '');
+    const name = String(req.body?.name || '').trim().slice(0, 60);
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
-const SEEAPI_KEY = process.env.SEEAPI_API_KEY;
-const SEEAPI_BASE = process.env.SEEAPI_API_BASE_URL || 'https://api.seeapi.com';
-const VIDEO_MODEL = process.env.VIDEO_MODEL || 'minimax-h3';
-const VIDEO_ENDPOINT = process.env.VIDEO_ENDPOINT || 'text-to-video';
-const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
-const DEEPSEEK_BASE = process.env.DEEPSEEK_API_BASE_URL || 'https://api.deepseek.com';
-const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
-const FREE_ALLOWANCE = parseInt(process.env.FREE_VIDEO_ALLOWANCE || '5', 10);
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ ok: false, error: 'Enter a valid email address.' });
+    if (password.length < 8) return res.status(400).json({ ok: false, error: 'Password must be at least 8 characters.' });
+    if (users.findByEmail(email)) return res.status(409).json({ ok: false, error: 'That email already has an account. Sign in instead.' });
 
-if (!SEEAPI_KEY || !DEEPSEEK_KEY) {
-  const msg = '缺少 SEEAPI_API_KEY 或 DEEPSEEK_API_KEY，请在环境变量/Vercel Dashboard 中配置';
-  if (require.main === module) { console.error(msg); process.exit(1); }
-  else console.error('[config]', msg);
-}
-
-const IS_SERVERLESS = !!(process.env.VERCEL);
-
-// ---------- 数据目录（Serverless 环境下项目目录只读，回退到 /tmp） ----------
-function resolveDataDir() {
-  const prefer = process.env.DATA_DIR;
-  if (prefer) { fs.mkdirSync(prefer, { recursive: true }); return prefer; }
-  const local = path.join(__dirname, 'data');
-  try { fs.mkdirSync(local, { recursive: true }); fs.accessSync(local, fs.constants.W_OK); return local; }
-  catch { const tmp = path.join('/tmp', 'rapvideo-data'); fs.mkdirSync(tmp, { recursive: true }); return tmp; }
-}
-const DATA_DIR = resolveDataDir();
-const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
-const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-function loadJSON(file, fallback) {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
-}
-function saveTasks() {
-  fs.writeFileSync(TASKS_FILE, JSON.stringify(tasks, null, 2));
-}
-const tasks = loadJSON(TASKS_FILE, {});
-
-// ---------- 支付相关存储 ----------
-const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
-const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
-const BALANCE_FILE = path.join(DATA_DIR, 'balance.json');
-// 商品 ID 默认值：已在 Pancake 后台创建完成，可用环境变量覆盖（避免 Serverless 冷启动重复建品）
-const DEFAULT_PRODUCTS = {
-  lite:  process.env.WAFFO_PRODUCT_LITE  || 'PROD_0pjgtokQhivBFvgnvpfCWq',
-  pro:   process.env.WAFFO_PRODUCT_PRO   || 'PROD_4pQWuE2N0o5ryYoVrplEn7',
-  ultra: process.env.WAFFO_PRODUCT_ULTRA || 'PROD_5SNXCTda0ZzIaQzZpahS1x'
-};
-const products = Object.assign({}, DEFAULT_PRODUCTS, loadJSON(PRODUCTS_FILE, {}));
-const orders = loadJSON(ORDERS_FILE, {});       // orderId -> {...}
-const balance = loadJSON(BALANCE_FILE, { trialRemaining: FREE_ALLOWANCE, purchased: 0 });
-function saveProducts() { fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2)); }
-function saveOrders() { fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2)); }
-function saveBalance() { fs.writeFileSync(BALANCE_FILE, JSON.stringify(balance, null, 2)); }
-function remainingVideos() { return Math.max(0, balance.trialRemaining + balance.purchased); }
-
-// 启动时确保 Pancake 商品存在（幂等；Serverless 下使用内置默认 ID，跳过创建）
-(async () => {
-  if (IS_SERVERLESS) return;
-  if (!process.env.WAFFO_MERCHANT_ID || !process.env.WAFFO_PRIVATE_KEY) return;
-  for (const [packKey, pack] of Object.entries(waffo.PACKS)) {
-    if (products[packKey]) continue;
-    try {
-      const p = await waffo.createOneTimeProduct(process.env.WAFFO_STORE_ID, packKey, pack);
-      products[packKey] = p.id;
-      saveProducts();
-      console.log(`[pancake] product created: ${packKey} → ${p.id}`);
-    } catch (e) {
-      console.error(`[pancake] 创建商品失败(${packKey}):`, e.message);
-    }
-  }
-})();
-
-// ---------- 选项 ----------
-const STAGES = {
-  studio: { zh: '录音棚', en: 'Recording studio', scene: 'a warm professional recording studio with a large condenser microphone, acoustic foam panels and soft amber studio lighting' },
-  booth:  { zh: '橙色录音棚', en: 'Orange booth', scene: 'a compact orange-lit vocal booth with neon glow, two performers close together against padded walls' },
-  street: { zh: '街头 Cypher', en: 'Street cypher', scene: 'an urban street cypher at dusk, graffiti wall background, camera slowly circling two confident performers' },
-  lobby:  { zh: '奢华大堂', en: 'Luxury lobby', scene: 'a luxury hotel lobby with marble floors, golden accents and elegant chandeliers' }
-};
-const OCCASIONS = {
-  duet:     { zh: '好友二重唱', en: 'Friendly duet', style: 'a warm, playful back-and-forth between two friends, big smiles and relaxed gestures' },
-  birthday: { zh: '生日祝福', en: 'Birthday shout-out', style: 'a high-energy birthday celebration vibe, confetti mood, joyful party energy' },
-  couple:   { zh: '情侣对唱', en: 'Couple duet', style: 'a romantic duet between partners, affectionate eye contact and synchronized hooks' },
-  battle:   { zh: '友谊 Rap Battle', en: 'Friendly rap battle', style: 'a friendly competitive rap battle, confident posturing, playful call-and-response, no hostility' }
-};
-
-// ---------- 工具 ----------
-function json(res, status, obj) {
-  const body = JSON.stringify(obj);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(body);
-}
-function readBody(req, limit = 15 * 1024 * 1024) {
-  return new Promise((resolve, reject) => {
-    let size = 0; const chunks = [];
-    req.on('data', c => {
-      size += c.length;
-      if (size > limit) { reject(Object.assign(new Error('body too large'), { status: 413 })); req.destroy(); return; }
-      chunks.push(c);
-    });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
-}
-
-// ---------- DeepSeek ----------
-async function composeDirection({ stage, occasion, language, personalDetail }) {
-  const s = STAGES[stage] || STAGES.studio;
-  const o = OCCASIONS[occasion] || OCCASIONS.duet;
-  const system = [
-    'You are a creative director for AI rap duet music videos (12 seconds, two adult performers).',
-    'You do two jobs in one response:',
-    '1) SCREENING: reject requests that are unsafe (minors, real celebrities, sexual content, violence, hate, impersonation of real artists, or any request suggesting the performers are not consenting adults).',
-    '2) DIRECTION: if safe, write one vivid English video-generation prompt describing the two performers, the stage, their alternating rap verses, matching mouth movement, camera behavior and overall vibe.',
-    'Output STRICT JSON only, no markdown fences:',
-    '{"approved": true|false, "reason": "short reason when rejected (same language as user input)", "direction": "the video prompt, max 1800 characters"}',
-    'The direction must explicitly mention: two adult performers, the stage environment, alternating verses (performer A, then performer B, then together), confident rap delivery with clear mouth movement, steady camera.'
-  ].join('\n');
-  const user = [
-    `Stage: ${s.en} — ${s.scene}`,
-    `Occasion: ${o.en} — ${o.style}`,
-    `Rap language: ${language === 'zh' ? 'Mandarin Chinese' : 'English'}`,
-    personalDetail ? `Personal detail from user (weave into the lyrics theme, ignore anything unsafe): ${personalDetail}` : 'No personal detail provided.'
-  ].join('\n');
-
-  const resp = await fetch(`${DEEPSEEK_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${DEEPSEEK_KEY}` },
-    body: JSON.stringify({
-      model: DEEPSEEK_MODEL,
-      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-      temperature: 1.0,
-      response_format: { type: 'json_object' }
-    })
-  });
-  if (!resp.ok) {
-    const t = await resp.text();
-    throw Object.assign(new Error(`DeepSeek error ${resp.status}: ${t.slice(0, 300)}`), { status: 502 });
-  }
-  const data = await resp.json();
-  let parsed;
-  try { parsed = JSON.parse(data.choices[0].message.content); }
-  catch { throw Object.assign(new Error('DeepSeek returned invalid JSON'), { status: 502 }); }
-  if (!parsed.approved) {
-    throw Object.assign(new Error(parsed.reason || '内容未通过审查'), { status: 400, blocked: true });
-  }
-  return String(parsed.direction || '').slice(0, 1800);
-}
-
-// ---------- SeeAPI ----------
-async function seeapiCreate(direction, aspectRatio) {
-  const resp = await fetch(`${SEEAPI_BASE}/v1/generations`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${SEEAPI_KEY}`,
-      'Idempotency-Key': crypto.randomUUID(),
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: VIDEO_MODEL,
-      endpoint: VIDEO_ENDPOINT,
-      provider: 'seeapi',
-      input: { prompt: direction, duration_seconds: 12, aspect_ratio: aspectRatio || '9:16', resolution: '768P' }
-    })
-  });
-  const text = await resp.text();
-  let jsonBody = null;
-  try { jsonBody = JSON.parse(text); } catch {}
-  if (!resp.ok && resp.status !== 202) {
-    const err = new Error(`SeeAPI error ${resp.status}: ${(jsonBody && JSON.stringify(jsonBody).slice(0, 300)) || text.slice(0, 300)}`);
-    err.status = resp.status === 402 ? 402 : 502;
-    throw err;
-  }
-  return jsonBody.generation;
-}
-
-async function seeapiQuery(taskId) {
-  const resp = await fetch(`${SEEAPI_BASE}/v1/generations/${encodeURIComponent(taskId)}`, {
-    headers: { Authorization: `Bearer ${SEEAPI_KEY}` }
-  });
-  const text = await resp.text();
-  if (!resp.ok) {
-    const err = new Error(`SeeAPI query error ${resp.status}`);
-    err.status = resp.status === 404 ? 404 : 502;
-    throw err;
-  }
-  return JSON.parse(text).generation;
-}
-
-// ---------- 业务 ----------
-async function handleGenerate(req, res) {
-  let body;
-  try { body = JSON.parse((await readBody(req)).toString('utf8') || '{}'); }
-  catch { return json(res, 400, { error: '无效的请求体' }); }
-
-  const { stage, occasion, language, format, personalDetail, consent, photos } = body;
-  if (!consent) return json(res, 400, { error: '需要勾选肖像与内容授权确认' });
-  if (!STAGES[stage] || !OCCASIONS[occasion]) return json(res, 400, { error: '无效的舞台或场景' });
-  if (!['9:16', '1:1', '16:9'].includes(format)) return json(res, 400, { error: '无效的视频画幅' });
-  if (remainingVideos() <= 0) return json(res, 402, { error: '视频额度已用完，请选择视频包' });
-
-  const taskId = 'local_' + crypto.randomBytes(8).toString('hex');
-  tasks[taskId] = {
-    id: taskId, status: 'composing', stage, occasion, language, format,
-    personalDetail: String(personalDetail || '').slice(0, 500),
-    photos: Array.isArray(photos) ? photos.slice(0, 2) : [],
-    createdAt: Date.now(), updatedAt: Date.now()
-  };
-  saveTasks();
-  json(res, 202, { taskId });
-
-  // 异步流水线
-  const t = tasks[taskId];
-  try {
-    t.direction = await composeDirection({ stage, occasion, language, personalDetail: t.personalDetail });
-    t.status = 'submitting'; t.updatedAt = Date.now(); saveTasks();
-    const gen = await seeapiCreate(t.direction, format);
-    t.seeapiId = gen.id; t.status = 'processing';
-    t.estimatedCredits = gen.estimated_credits;
-    // 扣减额度：优先用体验额度，再扣已购额度
-    if (balance.trialRemaining > 0) balance.trialRemaining -= 1; else balance.purchased -= 1;
-    saveBalance();
-    t.updatedAt = Date.now(); saveTasks();
+    const user = users.createUser({ email, name, provider: 'password', passwordHash: hashPassword(password) });
+    login(res, user);
+    res.json({ ok: true, user: users.publicUser(user) });
   } catch (e) {
-    t.status = 'failed';
-    t.error = e.blocked ? `内容未通过审查：${e.message}` : e.message;
-    t.updatedAt = Date.now(); saveTasks();
+    console.error('register failed:', e.message);
+    res.status(500).json({ ok: false, error: 'Could not create your account. Try again.' });
   }
-}
+});
 
-// ---------- 支付 ----------
-function markOrderPaid(orderId, paidInfo = {}) {
-  const o = orders[orderId];
-  if (!o || o.status === 'paid') return o;
-  o.status = 'paid';
-  o.paidAt = Date.now();
-  o.pancakeOrderId = paidInfo.pancakeOrderId || o.pancakeOrderId || null;
-  o.buyerEmail = paidInfo.buyerEmail || o.buyerEmail || null;
-  balance.purchased += o.videos;
-  saveBalance(); saveOrders();
-  console.log(`[pancake] order paid: ${orderId} (+${o.videos} videos)`);
-  return o;
-}
-
-async function handleCheckout(req, res) {
-  let body;
-  try { body = JSON.parse((await readBody(req)).toString('utf8') || '{}'); }
-  catch { return json(res, 400, { error: '无效的请求体' }); }
-  const packKey = body.pack;
-  const pack = waffo.PACKS[packKey];
-  if (!pack) return json(res, 400, { error: '无效的视频包' });
-  const productId = products[packKey];
-  if (!productId) return json(res, 503, { error: '视频包暂不可用（商品未创建成功），请稍后再试' });
-
-  const orderId = 'ord_' + crypto.randomBytes(8).toString('hex');
-  const publicBase = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
-  const successUrl = publicBase ? `${publicBase}/payment/success?order=${orderId}` : undefined;
-
+app.post('/api/auth/login', express.json(), (req, res) => {
   try {
-    const session = await waffo.createCheckoutSession({
+    const email = String(req.body?.email || '').trim();
+    const password = String(req.body?.password || '');
+    const user = users.findByEmail(email);
+    if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) {
+      return res.status(401).json({ ok: false, error: 'Wrong email or password.' });
+    }
+    if (user.banned) return res.status(403).json({ ok: false, error: 'This account is suspended.' });
+    login(res, user);
+    res.json({ ok: true, user: users.publicUser(user) });
+  } catch (e) {
+    console.error('login failed:', e.message);
+    res.status(500).json({ ok: false, error: 'Could not sign you in. Try again.' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  logout(req, res);
+  res.json({ ok: true });
+});
+
+/* ---- Google OAuth (authorization code flow) ---- */
+app.get('/auth/google', (req, res) => {
+  if (!googleEnabled(BASE_URL)) {
+    return res.redirect('/auth.html?error=google_not_configured');
+  }
+  const state = makeState();
+  // state lives in a short-lived cookie so the callback can prove it started here
+  res.append('Set-Cookie', `rv_oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`);
+  res.redirect(googleAuthUrl(BASE_URL, state));
+});
+
+app.get('/auth/google/callback', async (req, res) => {
+  try {
+    const { code, state, error } = req.query;
+    if (error) return res.redirect('/auth.html?error=' + encodeURIComponent(String(error)));
+    if (!code) return res.redirect('/auth.html?error=missing_code');
+
+    const cookieState = parseCookies(req).rv_oauth_state;
+    if (!state || !cookieState || state !== cookieState || !verifyState(String(state))) {
+      return res.redirect('/auth.html?error=bad_state');
+    }
+    res.append('Set-Cookie', 'rv_oauth_state=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+
+    const accessToken = await exchangeGoogleCode(BASE_URL, String(code));
+    const profile = await googleProfile(accessToken);
+    const user = upsertGoogleUser(profile);
+    if (user.banned) return res.redirect('/auth.html?error=suspended');
+    login(res, user);
+    res.redirect('/?welcome=1');
+  } catch (e) {
+    console.error('google auth failed:', e.message);
+    res.redirect('/auth.html?error=google_failed');
+  }
+});
+
+/* ---- the signed-in user's own videos ---- */
+app.get('/api/my/orders', requireUser, (req, res) => {
+  const mine = store.ordersForUser(req.user.id);
+  res.json({ ok: true, orders: mine });
+});
+
+/* ---- 1. free lyric preview (rate-limited, cheap: ~$0.001/call) ---- */
+const lyricHits = new Map();   // ip → timestamps
+app.use('/api/lyrics', (req, res, next) => {
+  const ip = req.ip;
+  const now = Date.now();
+  const hits = (lyricHits.get(ip) || []).filter((t) => now - t < 60 * 60 * 1000);
+  if (hits.length >= 10) return res.status(429).json({ ok: false, error: 'Too many attempts. Try again later.' });
+  hits.push(now);
+  lyricHits.set(ip, hits);
+  next();
+});
+app.post('/api/lyrics', express.json(), async (req, res) => {
+  try {
+    const topic = String(req.body?.topic || '').trim().slice(0, 300);
+    if (topic.length < 3) return res.status(400).json({ ok: false, error: 'topic too short' });
+    const lines = await writeLyrics(topic, req.body?.mode === 'duo' ? 'duo' : 'solo');
+    res.json({ ok: true, lines });
+  } catch (e) {
+    console.error('lyrics failed:', e.message);
+    res.status(502).json({ ok: false, error: 'lyrics engine unavailable' });
+  }
+});
+
+/* ---- 2. draft + checkout ---- */
+app.post('/api/draft', requireUser, upload.fields([{ name: 'photos', maxCount: 2 }]), async (req, res) => {
+  try {
+    const topic = String(req.body.topic || '').trim().slice(0, 300);
+    const pack = String(req.body.pack || 'single');
+    const mode = String(req.body.mode || 'solo') === 'duo' ? 'duo' : 'solo';
+    const beat = ['bounce', 'boombap', 'trap'].includes(req.body.beat) ? req.body.beat : 'bounce';
+    const productId = PRODUCTS[pack];
+
+    if (topic.length < 3) return res.status(400).json({ ok: false, error: 'Tell us what the rap is about.' });
+    if (!productId) return res.status(400).json({ ok: false, error: 'Unknown pack.' });
+    const files = req.files?.photos || [];
+    if (!files.length) return res.status(400).json({ ok: false, error: 'A performer photo is required.' });
+
+    const order = store.createOrder({
+      topic, mode, beat, pack,
+      offset: Number(req.body.offset || 4),
+      userId: req.user.id,
+      userEmail: req.user.email,
+      priceUsd: PACK_META[pack]?.amount ?? 0,
+    });
+    const dir = path.join(UPLOADS, order.id);
+    fs.mkdirSync(dir, { recursive: true });
+    const photoPaths = [];
+    for (const [i, f] of files.entries()) {
+      const ext = f.mimetype === 'image/png' ? 'png' : f.mimetype === 'image/webp' ? 'webp' : 'jpg';
+      const p = path.join(dir, `photo${i}.${ext}`);
+      fs.writeFileSync(p, f.buffer);
+      photoPaths.push(p);
+    }
+    store.updateOrder(order.id, { photos: photoPaths });
+
+    // A free credit (admin comp, failure make-good) skips Waffo entirely.
+    if (users.consumeCredit(req.user.id, pack)) {
+      store.updateOrder(order.id, { status: 'paid', free: true, priceUsd: 0, buyerEmail: req.user.email });
+      queueJob(order.id);
+      return res.json({ ok: true, orderId: order.id, checkoutUrl: null, free: true });
+    }
+
+    const session = await waffo.checkout.createSession({
       productId,
-      metadata: { orderId, pack: packKey, videos: String(pack.videos), app: 'rapduet' },
-      successUrl
+      productType: 'onetime',
+      currency: 'USD',
+      metadata: { orderId: order.id },
+      successUrl: `${BASE_URL}/success.html?o=${order.id}`,
     });
-    orders[orderId] = {
-      orderId, pack: packKey, videos: pack.videos, productId,
-      sessionId: session.sessionId || null, checkoutUrl: session.checkoutUrl,
-      status: 'pending', amount: pack.price, currency: process.env.WAFFO_CURRENCY || 'USD',
-      createdAt: Date.now()
-    };
-    saveOrders();
-    json(res, 200, { orderId, checkoutUrl: session.checkoutUrl });
+    store.updateOrder(order.id, { sessionId: session.sessionId });
+
+    res.json({ ok: true, orderId: order.id, checkoutUrl: session.checkoutUrl });
   } catch (e) {
-    json(res, e.status === 401 || e.status === 403 ? 502 : 502, { error: `创建收银台失败：${e.message}` });
+    console.error('draft failed:', e.message);
+    res.status(500).json({ ok: false, error: 'Could not start checkout. Try again.' });
   }
-}
+});
 
-function handleWebhook(req, res) {
-  readBody(req, 1024 * 1024).then(raw => {
-    const rawBody = raw.toString('utf8');
-    let event;
-    try {
-      event = waffo.verifyWebhook(rawBody, req.headers['x-waffo-signature']);
-    } catch (e) {
-      console.error('[pancake] webhook verify failed:', e.message);
-      return json(res, 401, { error: 'Invalid signature' });
-    }
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('OK');
-    // 幂等处理：event.id 去重 + 订单状态幂等
-    if (event.eventType === 'order.completed') {
-      const data = event.data || {};
-      const meta = data.metadata || {};
-      const orderId = meta.orderId || data.orderMerchantExternalId || null;
-      if (orderId && orders[orderId]) {
-        markOrderPaid(orderId, { pancakeOrderId: data.orderId, buyerEmail: data.buyerEmail });
-      } else {
-        console.warn('[pancake] order.completed without local order:', JSON.stringify(data).slice(0, 300));
-      }
-    } else {
-      console.log('[pancake] webhook event:', event.eventType, event.id || '');
-    }
-  }).catch(() => json(res, 400, { error: 'bad request' }));
-}
-
-async function handleTaskGet(req, res, id) {
-  const t = tasks[id];
-  if (!t) return json(res, 404, { error: '任务不存在' });
-
-  if (t.seeapiId && t.status === 'processing') {
-    try {
-      const gen = await seeapiQuery(t.seeapiId);
-      if (gen.status !== 'processing') {
-        t.status = gen.status === 'succeeded' ? 'succeeded' : 'failed';
-        if (gen.status === 'succeeded') {
-          const assets = (gen.result && gen.result.assets) || [];
-          t.videoUrl = (assets.find(a => a.type === 'video') || {}).url || null;
-        } else {
-          t.error = `生成未完成（${gen.status}${gen.status === 'refunded' ? '，额度已退回' : ''}）`;
-          // 失败返还额度
-          balance.trialRemaining += 1;
-          saveBalance();
-        }
-        t.consumedCredits = gen.consumed_credits;
-        t.updatedAt = Date.now(); saveTasks();
-      }
-    } catch (e) {
-      if (e.status === 404) {
-        t.status = 'failed'; t.error = '任务查询失败（远端任务不存在）';
-        t.updatedAt = Date.now(); saveTasks();
-      }
-    }
-  }
-  const { direction, photos, ...pub } = t;
-  json(res, 200, pub);
-}
-
-// ---------- 静态文件 ----------
-const MIME = {
-  '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8', '.json': 'application/json',
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.mp4': 'video/mp4'
-};
-function serveStatic(req, res, urlPath) {
-  let p = urlPath === '/' ? '/index.html' : urlPath;
-  p = path.normalize(p).replace(/^(\.\.[/\\])+/, '');
-  const file = path.join(__dirname, 'public', p);
-  if (!file.startsWith(path.join(__dirname, 'public'))) {
-    res.writeHead(403); return res.end('Forbidden');
-  }
-  fs.readFile(file, (err, buf) => {
-    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not Found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
-    res.end(buf);
-  });
-}
-
-// ---------- 路由 ----------
-async function handleRequest(req, res) {
-  const u = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  const p = u.pathname;
+/* ---- 4. webhook: the ONLY place an order becomes payable ---- */
+app.post('/api/webhooks/waffo', express.raw({ type: 'application/json' }), async (req, res) => {
+  const raw = req.body.toString('utf8');
+  const sig = req.headers['x-waffo-signature'] || '';
+  let event;
   try {
-    // API
-    if (req.method === 'GET' && p === '/api/health') {
-      return json(res, 200, {
-        ok: true,
-        serverless: IS_SERVERLESS,
-        model: VIDEO_MODEL,
-        seeapiKey: !!SEEAPI_KEY,
-        deepseekKey: !!DEEPSEEK_KEY,
-        pancakeConfigured: !!(process.env.WAFFO_MERCHANT_ID && process.env.WAFFO_PRIVATE_KEY),
-        dataDir: DATA_DIR,
-        time: new Date().toISOString()
-      });
-    }
-    if (req.method === 'GET' && p === '/api/config') {
-      return json(res, 200, {
-        stages: Object.fromEntries(Object.entries(STAGES).map(([k, v]) => [k, { zh: v.zh, en: v.en }])),
-        occasions: Object.fromEntries(Object.entries(OCCASIONS).map(([k, v]) => [k, { zh: v.zh, en: v.en }])),
-        model: VIDEO_MODEL, endpoint: VIDEO_ENDPOINT, duration: 12, resolution: '768P'
-      });
-    }
-    if (req.method === 'GET' && p === '/api/allowance') {
-      return json(res, 200, {
-        trialRemaining: Math.max(0, balance.trialRemaining),
-        purchased: Math.max(0, balance.purchased),
-        remaining: remainingVideos()
-      });
-    }
-    if (req.method === 'POST' && p === '/api/upload') {
-      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
-      const m = /^data:(image\/(jpeg|png|webp));base64,(.+)$/.exec(body.dataUrl || '');
-      if (!m) return json(res, 400, { error: '仅支持 JPG/PNG/WebP 图片' });
-      const buf = Buffer.from(m[3], 'base64');
-      if (buf.length > 2 * 1024 * 1024) return json(res, 400, { error: '图片不能超过 2 MB' });
-      const ext = m[1] === 'image/png' ? 'png' : m[1] === 'image/webp' ? 'webp' : 'jpg';
-      const name = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
-      fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
-      return json(res, 200, { url: `/uploads/${name}` });
-    }
-    if (req.method === 'POST' && p === '/api/generate') {
-      return await handleGenerate(req, res);
-    }
-    // ---------- 支付路由 ----------
-    if (req.method === 'POST' && p === '/api/checkout') {
-      return await handleCheckout(req, res);
-    }
-    if (req.method === 'POST' && p === '/api/webhooks/waffo') {
-      return handleWebhook(req, res);
-    }
-    let om;
-    if (req.method === 'GET' && (om = /^\/api\/orders\/([\w-]+)$/.exec(p))) {
-      const o = orders[om[1]];
-      if (!o) return json(res, 404, { error: '订单不存在' });
-      return json(res, 200, { orderId: o.orderId, pack: o.pack, videos: o.videos, status: o.status, amount: o.amount, currency: o.currency, createdAt: o.createdAt });
-    }
-    // 本地演示：模拟支付成功（仅当 WAFFO_DEV_SIMULATE=1；上线前关闭！）
-    if (req.method === 'POST' && p === '/api/dev/complete-order') {
-      if (process.env.WAFFO_DEV_SIMULATE !== '1') return json(res, 403, { error: 'dev simulate disabled' });
-      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
-      const o = markOrderPaid(body.orderId, { pancakeOrderId: 'simulated' });
-      if (!o) return json(res, 404, { error: '订单不存在或已支付' });
-      return json(res, 200, { orderId: o.orderId, status: o.status, videos: o.videos });
-    }
-    if (req.method === 'GET' && p === '/api/tasks') {
-      const list = Object.values(tasks)
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, 50)
-        .map(({ direction, photos, assets, ...pub }) => pub);
-      return json(res, 200, list);
-    }
-    let m;
-    if (req.method === 'GET' && (m = /^\/api\/tasks\/([\w-]+)$/.exec(p))) {
-      return await handleTaskGet(req, res, m[1]);
-    }
-    // 上传图片静态服务
-    if (req.method === 'GET' && p.startsWith('/uploads/')) {
-      const file = path.join(UPLOAD_DIR, path.normalize(p.slice('/uploads/'.length)).replace(/^(\.\.[/\\])+/, ''));
-      if (!file.startsWith(UPLOAD_DIR)) { res.writeHead(403); return res.end(); }
-      if (fs.existsSync(file)) {
-        res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
-        return res.end(fs.readFileSync(file));
-      }
-      res.writeHead(404); return res.end();
-    }
-    // 静态站点
-    return serveStatic(req, res, p);
-  } catch (e) {
-    console.error('[error]', req.method, p, e.message);
-    if (!res.headersSent) json(res, e.status || 500, { error: e.message || '服务器内部错误' });
+    event = verifyWebhook(raw, sig);
+  } catch {
+    return res.status(401).send('Invalid signature');
   }
+  if (store.hasEvent(event.id)) return res.status(200).send('OK (duplicate)');
+  store.logEvent(event);
+  console.log('webhook:', event.eventType);
+
+  if (event.eventType === WebhookEventType.OrderCompleted) {
+    const orderId = event.data?.metadata?.orderId;
+    const order = orderId && store.getOrder(orderId);
+    if (!order) {
+      console.error('webhook: order not found for', orderId);
+      return res.status(200).send('OK (unknown order)');
+    }
+    store.updateOrder(order.id, { status: 'paid', waffoOrderId: event.data.orderId, buyerEmail: event.data.buyerEmail ?? null });
+    queueJob(order.id);
+  } else if (event.eventType === WebhookEventType.RefundSucceeded) {
+    console.log('refund settled:', JSON.stringify(event.data));
+  }
+  res.status(200).send('OK');
+});
+
+/* ---- 6. progress polling ---- */
+app.get('/api/order/:id', (req, res) => {
+  const o = store.getOrder(req.params.id);
+  if (!o) return res.status(404).json({ ok: false });
+  // orders created after accounts shipped belong to exactly one user
+  if (o.userId && (!req.user || req.user.id !== o.userId)) {
+    return res.status(403).json({ ok: false, error: 'This order belongs to another account.' });
+  }
+  res.json({ ok: true, ...store.publicView(o) });
+});
+
+/* ---------------- job queue (one at a time — protects the credit balance) ---------------- */
+const queue = [];
+let running = false;
+
+function queueJob(orderId) {
+  queue.push(orderId);
+  pump();
 }
 
-// 本地运行：node server.js；Serverless（Vercel）：只导出 handler
-if (require.main === module) {
-  http.createServer(handleRequest).listen(PORT, () => {
-    console.log(`AI Rap Video server → http://localhost:${PORT}`);
-    console.log(`Model: ${VIDEO_MODEL} / ${VIDEO_ENDPOINT} (768P, 12s) · Trial allowance: ${FREE_ALLOWANCE}`);
-  });
+async function pump() {
+  if (running) return;
+  const id = queue.shift();
+  if (!id) return;
+  running = true;
+  const order = store.getOrder(id);
+  if (!order || !['paid'].includes(order.status)) { running = false; return pump(); }
+
+  console.log(`job ${id}: start`);
+  store.updateOrder(id, { status: 'running', step: 'lyrics' });
+  try {
+    const result = await runOrder(order, (step) => store.updateOrder(id, { step }));
+    const file = path.basename(result.videoPath);
+    // name it by order id so /videos/ URLs are stable
+    const finalPath = path.join(VIDEOS, `${id}.mp4`);
+    fs.renameSync(result.videoPath, finalPath);
+    store.updateOrder(id, { status: 'done', step: null, videoFile: `${id}.mp4`, credits: result.credits, lyrics: result.lyrics });
+    console.log(`job ${id}: done  (${result.credits} credits)`);
+  } catch (e) {
+    console.error(`job ${id}: FAILED —`, e.message);
+    store.updateOrder(id, { status: 'failed', error: 'Generation failed — we will refund you automatically.', failedAt: new Date().toISOString() });
+    // Refund policy (legal-pages/refund.html) promises automatic refunds on failure.
+    // MVP: log loudly; wire waffo refunds API here before real traffic.
+  }
+  running = false;
+  pump();
 }
-module.exports = { handleRequest };
+
+/* ---------------- 7-day retention sweep (Privacy Policy commitment) ---------------- */
+const SEVEN_DAYS = 7 * 24 * 3600 * 1000;
+async function sweep() {
+  const cutoff = Date.now() - SEVEN_DAYS;
+  for (const dir of [UPLOADS, VIDEOS]) {
+    let entries = [];
+    try { entries = await fsp.readdir(dir); } catch { continue; }
+    for (const name of entries) {
+      const p = path.join(dir, name);
+      const st = await fsp.stat(p).catch(() => null);
+      if (st && st.mtimeMs < cutoff) {
+        await fsp.rm(p, { recursive: true, force: true }).catch(() => {});
+        console.log('swept (7d):', p);
+      }
+    }
+  }
+}
+sweep();
+setInterval(sweep, 24 * 3600 * 1000);
+setInterval(() => users.pruneSessions(), 24 * 3600 * 1000);
+
+app.listen(PORT, () => {
+  console.log(`RapVideo on ${BASE_URL}`);
+  console.log(`webhook endpoint for Waffo dashboard: ${BASE_URL}/api/webhooks/waffo`);
+  console.log(`environment: ${process.env.WAFFO_ENV || 'test'}`);
+  console.log(`admin panel: ${BASE_URL}/admin   (key from ${adminHint().source}, ends ····${adminHint().tail})`);
+  if (!process.env.ADMIN_TOKEN) console.log(`admin key: ${adminToken()}   ← set ADMIN_TOKEN in .env to choose your own`);
+});

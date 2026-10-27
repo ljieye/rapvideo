@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Rap Video · RapVideo</title>
+<style>
+:root{--ink:#111113;--ink2:#5a5a63;--ink3:#8b8b95;--line:#e6e6ea;--line2:#d0d0d7;
+  --bg:#fff;--bg2:#f7f7f9;--brand:#5b3df5;--brand-soft:#f0edff;--ok:#0f6e56;--bad:#A32D2D;
+  --warn:#854f0b;--r:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  background:var(--bg);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:640px;margin:0 auto;padding:48px 24px}
+.logo{font-size:17px;font-weight:600;letter-spacing:-.3px;margin-bottom:36px}
+.logo span{color:var(--brand)}
+h1{font-size:30px;letter-spacing:-.8px;font-weight:650;margin-bottom:10px}
+.sub{color:var(--ink2);font-size:15px;margin-bottom:30px}
+.card{background:var(--bg2);border:.5px solid var(--line);border-radius:var(--r);padding:22px}
+ul{list-style:none}
+li{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:.5px solid var(--line);
+  font-size:15px;color:var(--ink3)}
+li:last-child{border-bottom:0}
+li.on{color:var(--ink);font-weight:500}
+li.ok{color:var(--ok)}
+.dot{width:22px;height:22px;border-radius:50%;border:.5px solid var(--line2);
+  display:inline-flex;align-items:center;justify-content:center;font-size:12px;flex:none;background:#fff}
+li.on .dot{border-color:var(--brand)}
+li.ok .dot{background:var(--ok);border-color:var(--ok);color:#fff}
+.spin{width:12px;height:12px;border:2px solid var(--brand-soft);border-top-color:var(--brand);
+  border-radius:50%;animation:sp 1s linear infinite;display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+.bar{height:6px;background:#e9e9ee;border-radius:3px;overflow:hidden;margin:18px 0 22px}
+.bar i{display:block;height:100%;background:var(--brand);width:0;transition:width .6s;border-radius:3px}
+video{width:100%;border-radius:12px;background:#000;margin:6px 0 16px}
+.note{font-size:13px;color:var(--ink3);margin-top:22px}
+.err{background:#fdf1f1;border:.5px solid #eec4c4;color:var(--bad);border-radius:11px;
+  padding:14px 16px;font-size:14px;margin-top:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;border:0;
+  background:var(--brand);color:#fff;padding:13px 26px;border-radius:11px;font-size:15px;
+  cursor:pointer;font-family:inherit;text-decoration:none;width:100%}
+.hidden{display:none}
+</style>
+<link rel="stylesheet" href="/fonts.css">
+<link rel="stylesheet" href="/ui.css">
+
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">Rap<span>Video</span></div>
+  <h1 id="title">Payment received — cooking your video</h1>
+  <p class="sub" id="sub">This takes about 5–6 minutes. Keep this tab open, or come back to this link later.</p>
+
+  <div class="card" id="card">
+    <div class="bar"><i id="bar"></i></div>
+    <ul id="list">
+      <li data-s="lyrics"><span class="dot">1</span>Writing your bars</li>
+      <li data-s="music"><span class="dot">2</span>Recording vocals and beat</li>
+      <li data-s="video"><span class="dot">3</span>Lip-syncing your performer</li>
+      <li data-s="done"><span class="dot">4</span>Final cut</li>
+    </ul>
+    <div class="err hidden" id="err"></div>
+    <div class="hidden" id="result">
+      <video id="player" controls playsinline></video>
+      <a class="btn" id="dl" download="rapvideo.mp4">Download MP4</a>
+      <p class="note">The link on this page stays valid for 7 days. The file is yours — post it anywhere.</p>
+    </div>
+  </div>
+  <p class="note" id="foot">Questions? support@rapvideo.xyz — keep your payment receipt email.</p>
+</div>
+
+<script>
+var ORDER_ID = new URLSearchParams(location.search).get('o');
+if (!ORDER_ID) document.getElementById('title').textContent = 'Missing order id';
+
+var LAST = null;
+function paint(o) {
+  if (JSON.stringify(o) === JSON.stringify(LAST)) return;
+  LAST = o;
+
+  if (o.status === 'awaiting_payment') {
+    document.getElementById('title').textContent = 'Waiting for payment confirmation';
+    document.getElementById('sub').textContent =
+      'We have your order. As soon as the payment clears (usually seconds), generation starts on its own — you can refresh this page.';
+    return;
+  }
+  if (o.status === 'failed') {
+    document.getElementById('title').textContent = 'Generation failed';
+    document.getElementById('sub').textContent = 'Your video could not be rendered.';
+    document.getElementById('err').textContent =
+      (o.error || 'Unknown error') + ' Per our refund policy, this order will be refunded — no action needed.';
+    document.getElementById('err').classList.remove('hidden');
+    return;
+  }
+
+  var stepIdx = { lyrics: 0, music: 1, video: 2, done: 4 }[o.step || (o.status === 'done' ? 'done' : 'lyrics')] ?? 0;
+  var items = document.querySelectorAll('#list li');
+  items.forEach(function (li, i) {
+    li.classList.toggle('ok', o.status === 'done' || i < stepIdx);
+    li.classList.toggle('on', o.status !== 'done' && i === stepIdx);
+    var d = li.querySelector('.dot');
+    if (o.status === 'done' || i < stepIdx) d.innerHTML = '&#10003;';
+    else if (i === stepIdx) d.innerHTML = '<span class="spin"></span>';
+    else d.textContent = String(i + 1);
+  });
+  document.getElementById('bar').style.width =
+    (o.status === 'done' ? 100 : Math.round((stepIdx / 4) * 100)) + '%';
+
+  if (o.status === 'done' && o.videoUrl) {
+    document.getElementById('title').textContent = 'Your rap video is ready 🎬';
+    document.getElementById('sub').textContent = 'Watch it, download it, post it.';
+    document.getElementById('player').src = o.videoUrl;
+    document.getElementById('dl').href = o.videoUrl;
+    document.getElementById('list').classList.add('hidden');
+    document.getElementById('bar').classList.add('hidden');
+    document.getElementById('result').classList.remove('hidden');
+  }
+}
+
+function poll() {
+  if (!ORDER_ID) return;
+  fetch('/api/order/' + ORDER_ID)
+    .then(function (r) { return r.json(); })
+    .then(function (r) {
+      if (r.ok) return paint(r);
+      // 403 = this order belongs to another account; 404 = gone
+      document.getElementById('title').textContent = 'Sign in to see this video';
+      document.getElementById('sub').textContent =
+        'This order belongs to an account. Sign in with the same email you paid with.';
+      document.getElementById('list').classList.add('hidden');
+      document.getElementById('bar').classList.add('hidden');
+      var foot = document.getElementById('foot');
+      if (foot && !document.getElementById('signin')) {
+        var a = document.createElement('a');
+        a.id = 'signin';
+        a.className = 'btn';
+        a.href = '/auth.html?next=' + encodeURIComponent('/success.html?o=' + ORDER_ID);
+        a.textContent = 'Sign in';
+        foot.parentNode.insertBefore(a, foot);
+      }
+    })
+    .catch(function () {});
+}
+poll();
+setInterval(poll, 4000);
+</script>
+</body>
+</html>
